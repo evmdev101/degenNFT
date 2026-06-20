@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Barlow+Condensed:wght@700;800&family=DM+Sans:wght@500;700;800&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
 
   <script>
     (function(){
@@ -650,7 +651,7 @@
     }
     .mint-layout {
       display: grid;
-      grid-template-columns: minmax(360px, 0.92fr) minmax(460px, 1.08fr);
+      grid-template-columns: minmax(500px, 1.1fr) minmax(420px, 0.9fr);
       gap: 0;
       align-items: stretch;
       padding: 18px;
@@ -718,7 +719,7 @@
       flex: 0 0 auto;
       aspect-ratio: 1 / 1;
       min-height: 0;
-      max-height: 460px;
+      max-height: 560px;
       width: 100%;
       border-radius: 14px;
       border: 1px solid color-mix(in srgb, var(--fg) 18%, transparent);
@@ -734,6 +735,219 @@
       width: 100%;
       height: 100%;
       object-fit: cover;
+    }
+    .nft-viewer {
+      --viewer-primary: var(--red);                                /* follows theme accent (was green #00ff66) */
+      --viewer-secondary: var(--fg);                               /* follows theme text  (was cyan  #18e7ff) */
+      --viewer-hot: color-mix(in srgb, var(--red) 70%, var(--fg)); /* corner accent (was magenta #ff2dfd) */
+      --viewer-bg-deep: color-mix(in srgb, var(--panel) 72%, #000);     /* dark, follows theme (was green #031009) */
+      --viewer-bg-mid: color-mix(in srgb, var(--panel) 90%, var(--bg)); /* dark slate (was green #061c16) */
+      --viewer-panel: color-mix(in srgb, var(--panel) 86%, var(--bg));
+      position: relative;
+      width: 100%;
+      height: 100%;
+      min-height: 320px;
+      overflow: hidden;
+      border-radius: 13px;
+      background:
+        radial-gradient(circle at 82% 82%, color-mix(in srgb, var(--viewer-secondary) 22%, transparent), transparent 33%),
+        radial-gradient(circle at 18% 13%, color-mix(in srgb, var(--viewer-hot) 28%, transparent), transparent 36%),
+        linear-gradient(135deg, var(--viewer-bg-deep) 0%, var(--viewer-bg-mid) 48%, #020813 100%);
+      cursor: grab;
+      touch-action: none;
+      isolation: isolate;
+    }
+    .nft-viewer::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+      background:
+        radial-gradient(circle, color-mix(in srgb, var(--viewer-primary) 70%, transparent) 0 0.8px, transparent 1.7px),
+        radial-gradient(circle, color-mix(in srgb, var(--viewer-secondary) 56%, transparent) 0 0.8px, transparent 1.6px),
+        linear-gradient(100deg, transparent 0 42%, color-mix(in srgb, var(--viewer-hot) 10%, transparent) 50%, transparent 60%);
+      background-position: 18px 12px, 55px 38px, 0 0;
+      background-size: 132px 118px, 176px 152px, auto;
+      opacity: 0.28;
+      animation: nft-star-drift 28s linear infinite;
+    }
+    .nft-viewer::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      border: 1px solid color-mix(in srgb, var(--viewer-primary) 72%, transparent);
+      border-radius: inherit;
+      box-shadow:
+        inset 0 0 34px color-mix(in srgb, var(--viewer-primary) 16%, transparent),
+        inset 0 -42px 80px color-mix(in srgb, var(--viewer-secondary) 12%, transparent),
+        0 0 24px color-mix(in srgb, var(--viewer-primary) 34%, transparent);
+    }
+    .nft-viewer-glare {
+      position: absolute;
+      inset: -12%;
+      z-index: 3;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 82% 84%, color-mix(in srgb, var(--viewer-secondary) 42%, transparent) 0 8%, color-mix(in srgb, var(--viewer-secondary) 20%, transparent) 20%, color-mix(in srgb, var(--viewer-secondary) 7%, transparent) 35%, transparent 58%),
+        radial-gradient(circle at 17% 11%, color-mix(in srgb, var(--viewer-hot) 50%, transparent) 0 8%, color-mix(in srgb, var(--viewer-hot) 24%, transparent) 20%, color-mix(in srgb, var(--viewer-hot) 8%, transparent) 34%, transparent 54%),
+        linear-gradient(116deg, transparent 0 36%, rgba(255,255,255,0.12) 45%, color-mix(in srgb, var(--viewer-hot) 8%, transparent) 51%, transparent 63%);
+      mix-blend-mode: screen;
+      opacity: 0.82;
+      filter: blur(1.4px) saturate(125%);
+    }
+    .nft-viewer-glare::after {
+      content: '';
+      position: absolute;
+      right: 7%;
+      bottom: 4%;
+      width: 44%;
+      height: 36%;
+      border-radius: 50%;
+      background: radial-gradient(circle, color-mix(in srgb, var(--viewer-secondary) 36%, transparent) 0 12%, color-mix(in srgb, var(--viewer-secondary) 14%, transparent) 34%, transparent 76%);
+      filter: blur(28px);
+    }
+    @keyframes nft-star-drift {
+      from { background-position: 18px 12px, 55px 38px, 0 0; }
+      to { background-position: 104px 86px, -59px 134px, 120px 0; }
+    }
+    .nft-viewer.is-dragging { cursor: grabbing; }
+    .nft-viewer canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      z-index: 0;
+    }
+    .nft-viewer-fallback {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .nft-viewer-zoom {
+      min-width: 54px;
+      text-align: center;
+      color: var(--fg);
+      font-size: 0.9rem;
+      font-weight: 800;
+      text-shadow: 0 0 12px color-mix(in srgb, var(--viewer-secondary) 72%, transparent);
+    }
+    .nft-viewer-bottom {
+      position: absolute;
+      left: 50%;
+      bottom: 12px;
+      z-index: 4;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: min(270px, calc(100% - 112px));
+      padding: 10px 14px 12px;
+      border: 1px solid color-mix(in srgb, var(--viewer-primary) 72%, transparent);
+      border-radius: 12px;
+      background:
+        radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--red) 18%, transparent), transparent 42%),
+        color-mix(in srgb, var(--panel) 82%, transparent);
+      backdrop-filter: blur(16px) saturate(170%);
+      box-shadow:
+        0 0 26px color-mix(in srgb, var(--red) 32%, transparent),
+        0 0 18px color-mix(in srgb, var(--fg) 14%, transparent),
+        inset 0 1px 0 rgba(255,255,255,0.08),
+        inset 0 0 18px color-mix(in srgb, var(--viewer-primary) 15%, transparent);
+    }
+    .nft-viewer-range {
+      flex: 1;
+      min-width: 0;
+      height: 18px;
+      appearance: none;
+      -webkit-appearance: none;
+      background: transparent;
+      cursor: pointer;
+    }
+    .nft-viewer-range::-webkit-slider-runnable-track {
+      height: 5px;
+      border-radius: 999px;
+      background: linear-gradient(90deg,
+        var(--red) 0 var(--range-fill, 34%),
+        color-mix(in srgb, var(--fg) 16%, transparent) var(--range-fill, 34%) 100%);
+      box-shadow: 0 0 10px color-mix(in srgb, var(--red) 30%, transparent);
+    }
+    .nft-viewer-range::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 17px;
+      height: 17px;
+      margin-top: -6px;
+      border: 2px solid color-mix(in srgb, var(--fg) 90%, white);
+      border-radius: 50%;
+      background: var(--red);
+      box-shadow:
+        0 0 0 3px color-mix(in srgb, var(--panel) 80%, transparent),
+        0 0 16px color-mix(in srgb, var(--red) 75%, transparent),
+        0 0 12px color-mix(in srgb, var(--fg) 32%, transparent);
+    }
+    .nft-viewer-range::-moz-range-track {
+      height: 5px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--fg) 16%, transparent);
+    }
+    .nft-viewer-range::-moz-range-progress {
+      height: 5px;
+      border-radius: 999px;
+      background: var(--red);
+      box-shadow: 0 0 10px color-mix(in srgb, var(--red) 45%, transparent);
+    }
+    .nft-viewer-range::-moz-range-thumb {
+      width: 15px;
+      height: 15px;
+      border: 2px solid color-mix(in srgb, var(--fg) 90%, white);
+      border-radius: 50%;
+      background: var(--red);
+      box-shadow: 0 0 16px color-mix(in srgb, var(--red) 75%, transparent);
+    }
+    .nft-viewer-glow-toggle {
+      width: 28px;
+      height: 28px;
+      flex: 0 0 28px;
+      border: 1px solid color-mix(in srgb, var(--viewer-secondary) 48%, var(--viewer-primary));
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--viewer-panel) 78%, transparent);
+      color: var(--fg);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.92rem;
+      line-height: 1;
+      cursor: pointer;
+      box-shadow: inset 0 0 12px color-mix(in srgb, var(--viewer-secondary) 12%, transparent), 0 0 14px color-mix(in srgb, var(--viewer-primary) 28%, transparent);
+      text-shadow: 0 0 10px var(--viewer-secondary);
+      transition: border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease, transform 0.15s ease;
+    }
+    .nft-viewer-glow-toggle:hover {
+      transform: translateY(-1px);
+      border-color: var(--viewer-secondary);
+      box-shadow: inset 0 0 14px color-mix(in srgb, var(--viewer-secondary) 18%, transparent), 0 0 18px color-mix(in srgb, var(--viewer-secondary) 35%, transparent);
+    }
+    .nft-viewer-glow-toggle.is-off {
+      color: color-mix(in srgb, var(--viewer-secondary) 45%, var(--panel));
+      border-color: color-mix(in srgb, var(--border) 55%, transparent);
+      box-shadow: inset 0 0 8px color-mix(in srgb, var(--viewer-secondary) 5%, transparent), 0 0 8px color-mix(in srgb, var(--border) 12%, transparent);
+      text-shadow: none;
+    }
+    .nft-viewer.glow-off::before { opacity: 0.12; }
+    .nft-viewer.glow-off .nft-viewer-glare { opacity: 0.18; }
+    .nft-viewer.glow-off::after {
+      box-shadow:
+        inset 0 0 18px rgba(255,0,255,0.08),
+        inset 0 -28px 52px rgba(0,255,255,0.06),
+        0 0 12px rgba(255,0,255,0.12);
+    }
+    @media (max-width: 640px) {
+      .nft-viewer { min-height: 260px; }
+      .nft-viewer-bottom { bottom: 10px; width: calc(100% - 48px); padding: 8px 10px 10px; }
+      .nft-viewer-zoom { min-width: 44px; font-size: 0.72rem; }
+      .nft-viewer-glow-toggle { width: 26px; height: 26px; flex-basis: 26px; }
     }
     .mint-nft-col .nft-card:hover { transform: none; box-shadow: none; border-color: var(--border); }
     .mint-nft-col .nft-card:hover .nft-card-img img { transform: none; }
@@ -1261,6 +1475,28 @@
     }
     .rw-counter.oink,
     .rw-counter.degen { color: var(--red); filter: drop-shadow(0 0 10px color-mix(in srgb, var(--red) 40%, transparent)); }
+    .rw-apr {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      margin: -4px 0 20px; padding: 12px;
+      border: 1px solid var(--border); border-radius: 10px; background: var(--panel);
+      font-size: 0.62rem; letter-spacing: 2.5px; text-transform: uppercase; opacity: 0.85;
+    }
+    .rw-apr .rw-apr-val {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 1.5rem; font-weight: 800; letter-spacing: 0; line-height: 1;
+      color: var(--red); filter: drop-shadow(0 0 8px color-mix(in srgb, var(--red) 40%, transparent));
+    }
+    .rw-apr .rw-apr-info {
+      cursor: help; opacity: 0.5; font-size: 0.7rem; position: relative;
+    }
+    .rw-apr .rw-apr-info:hover::after {
+      content: "APR is an estimate based on current reward rates and live OINK/DEGEN prices vs. the $50 NFT price. It changes over time.";
+      position: absolute; bottom: 130%; left: 50%; transform: translateX(-50%);
+      width: 240px; padding: 8px 10px; border-radius: 8px;
+      background: #000; border: 1px solid var(--border); color: var(--fg);
+      font-size: 0.6rem; letter-spacing: 0.3px; text-transform: none; line-height: 1.4;
+      opacity: 0.96; z-index: 20; pointer-events: none;
+    }
     .rw-harvest-all-btn {
       width: 100%; padding: 13px; border-radius: 7px;
       border: 1px solid var(--red);
@@ -3138,6 +3374,13 @@
           </div>
         </div>
 
+        <div class="rw-apr" id="mintAprRow" style="margin:0 0 18px">
+          <span>Current APR:</span>
+          <span class="rw-apr-val" id="mintAprDisplay">—</span>
+          <span class="rw-apr-info" id="mintAprInfo">ⓘ</span>
+          <span style="font-size:0.55rem;letter-spacing:1.5px;opacity:0.45">per NFT · est.</span>
+        </div>
+
         <div class="mint-label" style="margin-bottom:8px;opacity:1;font-size:0.78rem;color:var(--fg)">Quantity <span style="font-size:0.72rem;color:var(--red);opacity:1">· 3% off at 10+</span></div>
         <div class="mint-qty-row">
           <button class="mint-qty-btn" id="mintDec">−</button>
@@ -3230,6 +3473,11 @@
               <div class="rw-token-label">DEGEN Pending</div>
               <div class="rw-counter degen" id="rwTabDegen">0.000000</div>
             </div>
+          </div>
+          <div class="rw-apr" id="rwAprRow">
+            <span>Current APR:</span>
+            <span class="rw-apr-val" id="rwApr">—</span>
+            <span class="rw-apr-info" id="rwAprInfo">ⓘ</span>
           </div>
           <div class="rw-action-row">
             <button class="rw-harvest-all-btn" id="rwHarvestAll" disabled>MANUAL HARVEST</button>
@@ -4330,6 +4578,385 @@ function startAnimation() {
   })(0);
 }
 
+class DegenNftViewer {
+  constructor(container, options = {}) {
+    this.container = container;
+    this.imageUrl = options.imageUrl || '';
+    this.rotation = { x: 0, y: 0 };
+    this.targetRotation = { x: 0, y: 0 };
+    this.pan = { x: 0, y: 0 };
+    this.targetPan = { x: 0, y: 0 };
+    this.hover = { x: 0, y: 0 };
+    this.targetHover = { x: 0, y: 0 };
+    this.zoom = options.initialZoom || 0.87;
+    this.targetZoom = options.initialZoom || 0.87;
+    this.minZoom = 0.5;
+    this.maxZoom = 3;
+    this.glowMode = true;
+    this.dragging = false;
+    this.lastPointer = { x: 0, y: 0 };
+    this.raf = 0;
+    this.resizeObserver = null;
+    this.init();
+  }
+
+  init() {
+    this.destroy();
+    this.container.innerHTML = `
+      <div class="nft-viewer" role="img" aria-label="Interactive DegenStrategy NFT Miner viewer">
+        <div class="nft-viewer-glare" aria-hidden="true"></div>
+        <div class="nft-viewer-bottom">
+          <span class="nft-viewer-zoom">87%</span>
+          <input class="nft-viewer-range" type="range" min="50" max="300" value="87" aria-label="NFT zoom">
+          <button class="nft-viewer-glow-toggle" type="button" title="Glow Mode" aria-label="Toggle glow mode">◌</button>
+        </div>
+      </div>`;
+    this.viewer = this.container.querySelector('.nft-viewer');
+    this.zoomLabel = this.container.querySelector('.nft-viewer-zoom');
+    this.zoomRange = this.container.querySelector('.nft-viewer-range');
+    this.glowToggle = this.container.querySelector('.nft-viewer-glow-toggle');
+
+    if (!window.THREE || !this.imageUrl) {
+      this.renderFallback();
+      return;
+    }
+
+    this.colors = this.viewerPalette();
+
+    this.scene = new THREE.Scene();
+    this.scene.fog = new THREE.FogExp2(0x050008, 0.08);
+    this.camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+    this.camera.position.z = 3.35;
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer.setClearColor(0x000000, 0);
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.viewer.prepend(this.renderer.domElement);
+
+    this.group = new THREE.Group();
+    this.scene.add(this.group);
+
+    this.ambientLight = new THREE.AmbientLight(0xffffff, 1.35);
+    this.scene.add(this.ambientLight);
+    this.pinkLight = new THREE.PointLight(this.colors.hot, 42, 8);
+    this.pinkLight.position.set(-2.2, 1.8, 2.6);
+    this.scene.add(this.pinkLight);
+    this.cyanLight = new THREE.PointLight(this.colors.secondary, 44, 8);
+    this.cyanLight.position.set(2.1, -1.45, 2.8);
+    this.scene.add(this.cyanLight);
+    this.purpleLight = new THREE.PointLight(this.colors.primary, 30, 7);
+    this.purpleLight.position.set(0, 2.1, 1.8);
+    this.scene.add(this.purpleLight);
+
+    const particleGeometry = new THREE.BufferGeometry();
+    const positions = [];
+    const particleCount = 430;
+    for (let i = 0; i < particleCount; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 2.15 + Math.random() * 3.95;
+      const oval = 0.72 + Math.random() * 0.46;
+      positions.push(
+        Math.cos(angle) * radius,
+        Math.sin(angle) * radius * oval,
+        -1.9 - Math.random() * 2.8
+      );
+    }
+    particleGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    const particleMaterial = new THREE.PointsMaterial({
+      size: 0.011,
+      color: this.colors.primary,
+      transparent: true,
+      opacity: 0.46,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    this.particles = new THREE.Points(particleGeometry, particleMaterial);
+    this.particles.position.set(0, 0, -1.15);
+    this.scene.add(this.particles);
+
+    const cyanParticleGeometry = new THREE.BufferGeometry();
+    const cyanPositions = [];
+    for (let i = 0; i < 90; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 2.25 + Math.random() * 3.7;
+      cyanPositions.push(
+        Math.cos(angle) * radius,
+        Math.sin(angle) * radius * 0.68,
+        -1.75 - Math.random() * 2.6
+      );
+    }
+    cyanParticleGeometry.setAttribute('position', new THREE.Float32BufferAttribute(cyanPositions, 3));
+    const cyanParticleMaterial = new THREE.PointsMaterial({
+      size: 0.01,
+      color: this.colors.secondary,
+      transparent: true,
+      opacity: 0.34,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    this.cyanParticles = new THREE.Points(cyanParticleGeometry, cyanParticleMaterial);
+    this.cyanParticles.position.set(0, 0, -1.25);
+    this.scene.add(this.cyanParticles);
+
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin('anonymous');
+    loader.load(this.imageUrl, texture => {
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+      const image = texture.image || {};
+      const aspect = image.width && image.height ? image.width / image.height : 1;
+      const width = aspect >= 1 ? 2.45 : 2.45 * aspect;
+      const height = aspect >= 1 ? 2.45 / aspect : 2.45;
+      const depth = 0.08;
+      const geometry = new THREE.BoxGeometry(width, height, depth);
+      const materials = [
+        new THREE.MeshStandardMaterial({ color: 0x16001f, roughness: 0.7, metalness: 0.18 }),
+        new THREE.MeshStandardMaterial({ color: 0x16001f, roughness: 0.7, metalness: 0.18 }),
+        new THREE.MeshStandardMaterial({ color: 0x241030, roughness: 0.82, metalness: 0.08 }),
+        new THREE.MeshStandardMaterial({ color: 0x241030, roughness: 0.82, metalness: 0.08 }),
+        new THREE.MeshStandardMaterial({ map: texture, roughness: 0.24, metalness: 0.08 }),
+        new THREE.MeshStandardMaterial({ color: 0x050008, roughness: 0.9 })
+      ];
+      this.book = new THREE.Mesh(geometry, materials);
+      this.book.rotation.y = -0.035;
+      const rimGeometry = new THREE.EdgesGeometry(geometry);
+      const rimMaterial = new THREE.LineBasicMaterial({ color: this.colors.primary, transparent: true, opacity: 0.82 });
+      this.rim = new THREE.LineSegments(rimGeometry, rimMaterial);
+      this.book.add(this.rim);
+      this.group.add(this.book);
+      this.plane = this.book;
+      this.resize();
+      this.animate();
+    }, undefined, () => this.renderFallback());
+
+    this.bindEvents();
+    this.resizeObserver = new ResizeObserver(() => this.resize());
+    this.resizeObserver.observe(this.container);
+  }
+
+  viewerPalette() {
+    // Resolve the (possibly var()/color-mix) viewer vars to concrete rgb() so THREE can parse
+    // them — and so the colors follow whichever theme is active.
+    const probe = document.createElement('span');
+    probe.style.cssText = 'position:absolute;width:0;height:0;visibility:hidden;pointer-events:none';
+    this.viewer.appendChild(probe);
+    const resolve = (name, fallback) => {
+      probe.style.color = fallback;          // known-good baseline
+      probe.style.color = `var(${name})`;    // overridden only if it resolves
+      return getComputedStyle(probe).color || fallback;
+    };
+    const pal = {
+      primary: resolve('--viewer-primary', '#e06c75'),
+      secondary: resolve('--viewer-secondary', '#9cdef2'),
+      hot: resolve('--viewer-hot', '#ec6f9e')
+    };
+    this.viewer.removeChild(probe);
+    return pal;
+  }
+
+  bindEvents() {
+    this.pointerDown = e => {
+      if (e.target.closest('.nft-viewer-bottom')) return;
+      this.dragging = true;
+      this.viewer.classList.add('is-dragging');
+      this.lastPointer = { x: e.clientX, y: e.clientY };
+      this.viewer.setPointerCapture?.(e.pointerId);
+    };
+    this.pointerMove = e => {
+      const rect = this.viewer.getBoundingClientRect();
+      const nx = ((e.clientX - rect.left) / Math.max(1, rect.width) - 0.5) * 2;
+      const ny = ((e.clientY - rect.top) / Math.max(1, rect.height) - 0.5) * 2;
+      this.targetHover.x = Math.max(-1, Math.min(1, nx));
+      this.targetHover.y = Math.max(-1, Math.min(1, ny));
+      if (!this.dragging) return;
+      const dx = e.clientX - this.lastPointer.x;
+      const dy = e.clientY - this.lastPointer.y;
+      this.lastPointer = { x: e.clientX, y: e.clientY };
+      const panScale = 4.4 / Math.max(1, Math.min(rect.width, rect.height));
+      this.targetPan.x += dx * panScale;
+      this.targetPan.y -= dy * panScale;
+      this.clampPan();
+      this.targetRotation.y = Math.max(-0.16, Math.min(0.16, this.targetPan.x * 0.1));
+      this.targetRotation.x = Math.max(-0.16, Math.min(0.16, -this.targetPan.y * 0.1));
+    };
+    this.pointerLeave = () => {
+      this.dragging = false;
+      this.viewer.classList.remove('is-dragging');
+      this.targetHover = { x: 0, y: 0 };
+    };
+    this.pointerUp = e => {
+      this.dragging = false;
+      this.viewer.classList.remove('is-dragging');
+      this.viewer.releasePointerCapture?.(e.pointerId);
+    };
+    this.wheel = e => {
+      e.preventDefault();
+      this.setZoom(this.targetZoom + (e.deltaY > 0 ? -0.12 : 0.12));
+    };
+    this.click = e => {
+      const action = e.target?.dataset?.nftViewer;
+      if (action === 'zoom-in') this.setZoom(this.targetZoom + 0.2);
+      if (action === 'zoom-out') this.setZoom(this.targetZoom - 0.2);
+      if (action === 'reset') this.reset();
+      if (action === 'fullscreen') this.fullscreen();
+    };
+    this.input = e => {
+      this.setZoom(Number(e.target.value) / 100);
+    };
+    this.toggleGlow = () => this.setGlowMode(!this.glowMode);
+
+    this.viewer.addEventListener('pointerdown', this.pointerDown);
+    this.viewer.addEventListener('pointermove', this.pointerMove);
+    this.viewer.addEventListener('pointerup', this.pointerUp);
+    this.viewer.addEventListener('pointercancel', this.pointerUp);
+    this.viewer.addEventListener('pointerleave', this.pointerLeave);
+    this.viewer.addEventListener('wheel', this.wheel, { passive: false });
+    this.viewer.addEventListener('click', this.click);
+    this.zoomRange?.addEventListener('input', this.input);
+    this.glowToggle?.addEventListener('click', this.toggleGlow);
+  }
+
+  setZoom(value) {
+    this.targetZoom = Math.max(this.minZoom, Math.min(this.maxZoom, value));
+    const pct = Math.round(this.targetZoom * 100);
+    if (this.zoomLabel) this.zoomLabel.textContent = pct + '%';
+    if (this.zoomRange) {
+      this.zoomRange.value = pct;
+      const lo = Number(this.zoomRange.min) || 0, hi = Number(this.zoomRange.max) || 100;
+      const fill = hi > lo ? ((pct - lo) / (hi - lo)) * 100 : 0;
+      this.zoomRange.style.setProperty('--range-fill', fill.toFixed(1) + '%');
+    }
+    this.clampPan();
+  }
+
+  reset() {
+    this.targetRotation = { x: 0, y: 0 };
+    this.targetPan = { x: 0, y: 0 };
+    this.targetHover = { x: 0, y: 0 };
+    this.setZoom(0.87);
+  }
+
+  fullscreen() {
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else this.viewer.requestFullscreen?.();
+  }
+
+  setGlowMode(enabled) {
+    this.glowMode = enabled;
+    this.viewer?.classList.toggle('glow-off', !enabled);
+    this.glowToggle?.classList.toggle('is-off', !enabled);
+    this.glowToggle?.setAttribute('aria-pressed', String(enabled));
+  }
+
+  resize() {
+    if (!this.renderer || !this.camera || !this.viewer) return;
+    const rect = this.viewer.getBoundingClientRect();
+    const width = Math.max(1, Math.floor(rect.width));
+    const height = Math.max(1, Math.floor(rect.height));
+    this.camera.aspect = width / height;
+    this.camera.position.z = this.camera.aspect < 0.85 ? 3.75 : 3.35;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(width, height, false);
+  }
+
+  animate() {
+    this.raf = requestAnimationFrame(() => this.animate());
+    if (!this.book || !this.group || !this.renderer) return;
+    const t = performance.now() * 0.001;
+    this.hover.x += (this.targetHover.x - this.hover.x) * 0.08;
+    this.hover.y += (this.targetHover.y - this.hover.y) * 0.08;
+    this.rotation.x += (this.targetRotation.x - this.rotation.x) * 0.11;
+    this.rotation.y += (this.targetRotation.y - this.rotation.y) * 0.11;
+    this.pan.x += (this.targetPan.x - this.pan.x) * 0.13;
+    this.pan.y += (this.targetPan.y - this.pan.y) * 0.13;
+    this.zoom += (this.targetZoom - this.zoom) * 0.12;
+    this.group.scale.setScalar(this.zoom);
+    this.group.position.x += (this.pan.x - this.group.position.x) * 0.12;
+    this.group.position.y += (this.pan.y - this.group.position.y) * 0.12;
+    this.book.rotation.x += ((-this.hover.y * 0.09 + this.rotation.x) - this.book.rotation.x) * 0.06;
+    this.book.rotation.y += ((this.hover.x * 0.09 + this.rotation.y - 0.035) - this.book.rotation.y) * 0.06;
+    this.book.rotation.z = Math.sin(t * 0.7) * 0.008;
+    if (this.rim) this.rim.material.opacity = this.glowMode ? 0.68 + Math.sin(t * 3) * 0.22 : 0.18;
+    if (this.particles) {
+      this.particles.rotation.z += 0.0009;
+      this.particles.rotation.y = Math.sin(t * 0.18) * 0.14;
+      this.particles.rotation.x = Math.cos(t * 0.16) * 0.08;
+      this.particles.material.opacity = this.glowMode ? 0.46 : 0.14;
+    }
+    if (this.cyanParticles) {
+      this.cyanParticles.rotation.z -= 0.0012;
+      this.cyanParticles.rotation.y = Math.cos(t * 0.2) * 0.11;
+      this.cyanParticles.material.opacity = this.glowMode ? 0.34 : 0.1;
+    }
+    this.pinkLight.intensity = this.glowMode ? 36 + Math.sin(t * 2.3) * 10 : 12;
+    this.cyanLight.intensity = this.glowMode ? 38 + Math.cos(t * 2.1) * 11 : 12;
+    this.purpleLight.intensity = this.glowMode ? 28 + Math.sin(t * 1.7) * 8 : 8;
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  clampPan() {
+    const travel = Math.max(0.42, this.targetZoom * 0.58);
+    this.targetPan.x = Math.max(-travel, Math.min(travel, this.targetPan.x));
+    this.targetPan.y = Math.max(-travel, Math.min(travel, this.targetPan.y));
+  }
+
+  renderFallback() {
+    if (!this.imageUrl) return;
+    this.container.innerHTML = `<img class="nft-viewer-fallback" src="${this.imageUrl}" alt="DegenStrategy NFT Miner" loading="lazy">`;
+  }
+
+  destroy() {
+    if (this.raf) cancelAnimationFrame(this.raf);
+    this.resizeObserver?.disconnect?.();
+    if (this.viewer) {
+      this.viewer.removeEventListener('pointerdown', this.pointerDown);
+      this.viewer.removeEventListener('pointermove', this.pointerMove);
+      this.viewer.removeEventListener('pointerup', this.pointerUp);
+      this.viewer.removeEventListener('pointercancel', this.pointerUp);
+      this.viewer.removeEventListener('pointerleave', this.pointerLeave);
+      this.viewer.removeEventListener('wheel', this.wheel);
+      this.viewer.removeEventListener('click', this.click);
+      this.zoomRange?.removeEventListener('input', this.input);
+      this.glowToggle?.removeEventListener('click', this.toggleGlow);
+    }
+    if (this.particles) {
+      this.particles.geometry?.dispose?.();
+      this.particles.material?.dispose?.();
+    }
+    if (this.cyanParticles) {
+      this.cyanParticles.geometry?.dispose?.();
+      this.cyanParticles.material?.dispose?.();
+    }
+    if (this.rim) {
+      this.rim.geometry?.dispose?.();
+      this.rim.material?.dispose?.();
+    }
+    if (this.book) {
+      this.book.geometry?.dispose?.();
+      if (Array.isArray(this.book.material)) this.book.material.forEach(material => {
+        material.map?.dispose?.();
+        material.dispose?.();
+      });
+      else {
+        this.book.material?.map?.dispose?.();
+        this.book.material?.dispose?.();
+      }
+    }
+    this.renderer?.dispose?.();
+  }
+}
+
+
+let mintNftViewer = null;
+
+function renderMintNftViewer(img) {
+  const imgBox = document.getElementById('mintPreviewImg');
+  if (!imgBox || !img) return;
+  mintNftViewer?.destroy?.();
+  mintNftViewer = new DegenNftViewer(imgBox, { imageUrl: img });
+  window.mintNftViewer = mintNftViewer;
+}
+
 
 // ════════════════════════════════════════════════════════════
 //  Mint NFT preview (loads image without wallet)
@@ -4343,8 +4970,7 @@ async function loadMintPreview() {
     const desc  = meta?.description || '';
     const attrs = Array.isArray(meta?.attributes) ? meta.attributes : [];
     if (img) {
-      const imgBox = document.getElementById('mintPreviewImg');
-      if (imgBox) imgBox.innerHTML = `<img src="${img}" alt="DegenStrategy NFT Miner" loading="lazy">`;
+      renderMintNftViewer(img);
       const navImg = document.getElementById('navDegenImg');
       if (navImg) { navImg.src = img; navImg.style.display = 'block'; }
     }
@@ -4793,6 +5419,9 @@ async function loadMintTab() {
     return;
   }
 
+  // ── APR (independent of wallet — uses a reference holder) ─────
+  loadMintApr();
+
   // ── Step 2: active count (fast call) ─────────────────────────
   let liveActive = 0;
   try {
@@ -5019,12 +5648,87 @@ async function loadRewardsTab() {
   try {
     const [rO,, rD] = await rewardsContract.getEarnings(userAddress);
     oinkRate = rO / 3n; degenRate = rD / 3n;
-  } catch(e) { oinkRate = degenRate = 0n; }
+    updateRewardsApr(rO, rD, userNftBalance);
+  } catch(e) { oinkRate = degenRate = 0n; updateRewardsApr(0n, 0n, 0n); }
 
   const showCompounded = localStorage.getItem('degen-compounded') !== 'false';
   if (showCompounded) startRewardsTabAnimation();
   loadStakedMiners();
   loadMinerSettings();
+}
+
+// Current APR — replicates the official site (degenstrategy.github.io/NFT-miner) exactly.
+// annualReward = rawRate × 3,061,747 ; investment = $50 per NFT ; APR = annualUsd / investment × 100.
+// getEarnings returns [oinkRate, _, degenRate, _]; the official uses the RAW rate (no /3 divisor).
+const APR_BLOCKS_PER_YEAR = 3061747;     // official multiplier
+const NFT_PRICE_USD = 50;                // official N8e (USD per NFT)
+const OINK_PRICE_PAIR  = '0xef9ea3d72e28c7140481209190601c085027d6fe'; // priceUsd  → OINK/USD
+const DEGEN_PRICE_PAIR = '0x3029aa801176f6904e2b6c7527334c215eaf1d8f'; // priceNative × OINK = DEGEN/USD
+
+async function fetchAprPrices() {
+  // Mirrors the official price fetch: OINK from priceUsd, DEGEN from priceNative × OINK.
+  const oRes = await (await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${OINK_PRICE_PAIR}`)).json();
+  const oPair = oRes.pairs && oRes.pairs[0];
+  const oinkUsd = oPair ? parseFloat(oPair.priceUsd || 0) : 0;
+  const dRes = await (await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${DEGEN_PRICE_PAIR}`)).json();
+  const dPair = dRes.pairs && dRes.pairs[0];
+  const degenNative = dPair ? parseFloat(dPair.priceNative || 0) : 0;
+  return { oinkUsd, degenUsd: degenNative * oinkUsd };
+}
+
+// Core APR math (official formula). rates = raw getEarnings values; nftCount = NFTs the rates cover.
+function aprFromRates(rOraw, rDraw, nftCount, oinkUsd, degenUsd) {
+  const annualOink  = Number(ethers.formatUnits(rOraw, 18)) * APR_BLOCKS_PER_YEAR;
+  const annualDegen = Number(ethers.formatUnits(rDraw, 18)) * APR_BLOCKS_PER_YEAR;
+  const annualUsd   = annualOink * oinkUsd + annualDegen * degenUsd;
+  const investment  = NFT_PRICE_USD * nftCount;
+  return investment > 0 ? (annualUsd / investment) * 100 : 0;
+}
+
+async function updateRewardsApr(rOraw, rDraw, nftBal) {
+  const el = $('rwApr');
+  if (!el) return;
+  const n = Number(nftBal);
+  if (!(n > 0)) { el.textContent = '—'; return; }
+  try {
+    const { oinkUsd, degenUsd } = await fetchAprPrices();
+    if (!(oinkUsd > 0) || !(degenUsd > 0)) { el.textContent = '—'; return; }
+    const apr = aprFromRates(rOraw, rDraw, n, oinkUsd, degenUsd);
+    el.textContent = apr > 0 ? Math.round(apr).toLocaleString() + '%' : '—';
+  } catch(e) {
+    console.warn('updateRewardsApr:', e);
+    el.textContent = '—';
+  }
+}
+
+// APR is per-NFT (rate and the $50×count investment both scale with holdings, so they cancel),
+// so the mint page can show the same figure derived from any reference holder — no wallet needed.
+async function getAprReferenceHolder() {
+  try {
+    const res = await (await fetch(`https://api.scan.pulsechain.com/api?module=token&action=getTokenHolders&contractaddress=${NFT_CONTRACT}&offset=1&page=1`)).json();
+    const top = res && res.result && res.result[0];
+    if (top && top.address && Number(top.value) > 0) return { addr: top.address, bal: Number(top.value) };
+  } catch(e) { console.warn('APR holder fetch:', e); }
+  if (userAddress && typeof userNftBalance !== 'undefined' && userNftBalance > 0n) {
+    return { addr: userAddress, bal: Number(userNftBalance) };
+  }
+  return null;
+}
+
+async function loadMintApr() {
+  const el = $('mintAprDisplay');
+  if (!el || !roProvider) return;
+  try {
+    const [{ oinkUsd, degenUsd }, ref] = await Promise.all([fetchAprPrices(), getAprReferenceHolder()]);
+    if (!ref || !(ref.bal > 0) || !(oinkUsd > 0) || !(degenUsd > 0)) { el.textContent = '—'; return; }
+    const rewards = new ethers.Contract(REWARDS_ADDRESS, REWARDS_ABI, roProvider);
+    const [rO,, rD] = await rewards.getEarnings(ref.addr);
+    const apr = aprFromRates(rO, rD, ref.bal, oinkUsd, degenUsd);
+    el.textContent = apr > 0 ? Math.round(apr).toLocaleString() + '%' : '—';
+  } catch(e) {
+    console.warn('loadMintApr:', e);
+    el.textContent = '—';
+  }
 }
 
 // All known OINK staking pool addresses (Piggy Bank — all 6 durations confirmed)
@@ -5126,6 +5830,21 @@ function fmtFullReward(n) {
   return value.toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
+  });
+}
+
+// LP/staked token quantities can be tiny fractions (LP units have a very high
+// unit price), so a flat 2-decimal format rounds a real balance to "0.00".
+// Show extra decimals for small values, keeping ~4 significant figures.
+function fmtLpAmount(n) {
+  const value = Number(n || 0);
+  const abs = Math.abs(value);
+  if (abs === 0) return '0.00';
+  let maxDec = 2;
+  if (abs < 1) maxDec = Math.min(8, Math.max(2, 3 - Math.floor(Math.log10(abs))));
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: maxDec,
   });
 }
 
@@ -5696,7 +6415,7 @@ const _DS_IMG = name => `https://raw.githubusercontent.com/degenstrategy/interfa
 const _PT_IMG = addr => `https://raw.githubusercontent.com/piteasio/app-tokens/main/token-logo/${addr}.png`;
 
 const TOKEN_LOGOS = {
-  'PLS':      _DS_IMG('pls'),
+  'PLS':      'pls.png',
   'PLSX':     _PT_IMG('0x95B303987A60C71504D99Aa1b13B4DA07b0790ab'),
   'INC':      _PT_IMG('0x2fa878Ab3F87CC1C9737Fc071108F904c0B0C95d'),
   'HEX':      _DS_IMG('hex'),
@@ -5714,7 +6433,7 @@ const TOKEN_LOGOS = {
   'sPRINT':   _DS_IMG('print'),
   'INCD':     _DS_IMG('incd'),
   '9INCH':    _DS_IMG('9inch'),
-  'vPLS':     _DS_IMG('pls'),
+  'vPLS':     'vouchpls.png',
   'HOC':      _DS_IMG('hoc'),
   'ISLAND':   'https://cdn.dexscreener.com/cms/images/654e3bc18fb1a952a77693c1ee11a95c9fdfb989c0e1b63106127992675c8ae5?width=800&height=800&quality=95&format=auto',
   'IMPLS':    'https://coin-images.coingecko.com/coins/images/31493/small/impls_200x200.png?1696530304',
@@ -6403,7 +7122,7 @@ async function fetchDegenVaultData(forceRefresh) {
   let degenPriceGraph = null;
 
   const loadDegenFarm = async (farm, idx) => {
-    let stakeCount = 0, totalStaked = 0, pendingDegen = 0, dailyReward = 0;
+    let stakeCount = 0, totalStaked = 0, totalStakedRaw = 0n, pendingDegen = 0, dailyReward = 0;
     let apr = null, tvlUsd = null, tvlRewardToken = null;
     let totalEarnedDegen = 0;
     let claimableStakeIds = [];
@@ -6471,7 +7190,10 @@ async function fetchDegenVaultData(forceRefresh) {
               withT(c.userInfo(userAddress, s), 4000),
               withT(c.viewStakeEarnings(userAddress, s), 4000),
             ]);
-            if (infoR.status === 'fulfilled') totalStaked += Number(ethers.formatUnits(infoR.value.amount, farm.dec));
+            if (infoR.status === 'fulfilled') {
+              totalStakedRaw += BigInt(infoR.value.amount);
+              totalStaked += Number(ethers.formatUnits(infoR.value.amount, farm.dec));
+            }
             if (earnR.status === 'fulfilled') {
               stakeEarningsWorks = true;
               if (earnR.value > 0n) {
@@ -6573,7 +7295,7 @@ async function fetchDegenVaultData(forceRefresh) {
     }
 
     _degenVaultData[idx] = {
-      farm, idx, stakeCount, totalStaked, pendingDegen, dailyReward, apr, tvlUsd, tvlRewardToken,
+      farm, idx, stakeCount, totalStaked, totalStakedRaw, pendingDegen, dailyReward, apr, tvlUsd, tvlRewardToken,
       officialStats, claimableStakeIds, lpAddr, allocPct, pairToken0, pairToken1,
       walletBal, walletUsd, walletBalRaw, allowanceRaw, lpPriceUsd, stakedUsd, stakedPct, pendingUsd,
       annualRewardTokens, annualRewardsUsd, rewardPriceUsd: degenPriceUsd,
@@ -6968,9 +7690,9 @@ function renderOinkFarmTableRow(d) {
 function renderDegenFarmTableRow(d) {
   const { farm, idx, totalStaked, pendingDegen, apr, walletBal } = d;
   const tokenLabel = farm.tokens.join(' / ');
-  const stakedLabel = totalStaked > 1e-10 ? fmtFullReward(totalStaked) : '—';
+  const stakedLabel = totalStaked > 1e-10 ? fmtLpAmount(totalStaked) : '—';
   const pendingStr = fmtFullReward(pendingDegen || 0);
-  const walletStr = walletBal !== null && walletBal !== undefined ? fmtFullReward(walletBal) : '—';
+  const walletStr = walletBal !== null && walletBal !== undefined ? fmtLpAmount(walletBal) : '—';
   return `
     <tr>
       <td>
@@ -7179,7 +7901,13 @@ function maxDegenUnstake(idx) {
   const d = _degenVaultData[idx];
   const inp = document.getElementById('dfarm-in-' + idx);
   if (!d || !inp) return;
-  inp.value = (d.totalStaked || 0) > 1e-10 ? d.totalStaked.toFixed(6).replace(/\.?0+$/, '') : '';
+  // Use the exact on-chain amount — rounding to fixed decimals can exceed the
+  // real staked balance (e.g. 0.00000399 → 0.000004) and trip the unstake check.
+  if (d.totalStakedRaw != null && d.totalStakedRaw > 0n) {
+    inp.value = ethers.formatUnits(d.totalStakedRaw, 18);
+  } else {
+    inp.value = (d.totalStaked || 0) > 1e-10 ? d.totalStaked.toFixed(6).replace(/\.?0+$/, '') : '';
+  }
   updateDegenApproveLabel(idx);
 }
 
@@ -7208,20 +7936,24 @@ async function refreshDegenFarmData(idx) {
       if (d.lpPriceUsd > 0) d.walletUsd = d.walletBal * d.lpPriceUsd;
     }
     if (aRaw !== null) d.allowanceRaw = BigInt(aRaw);
-    let totalStaked = 0, pending = 0;
+    let totalStaked = 0, totalStakedRaw = 0n, pending = 0;
     const claimIds = [];
     for (let s = 0; s < Math.min(d.stakeCount, 20); s++) {
       const [infoR, earnR] = await Promise.allSettled([
         c.userInfo(userAddress, s),
         c.viewStakeEarnings(userAddress, s),
       ]);
-      if (infoR.status === 'fulfilled') totalStaked += Number(ethers.formatUnits(infoR.value.amount, 18));
+      if (infoR.status === 'fulfilled') {
+        totalStakedRaw += BigInt(infoR.value.amount);
+        totalStaked += Number(ethers.formatUnits(infoR.value.amount, 18));
+      }
       if (earnR.status === 'fulfilled' && earnR.value > 0n) {
         pending += Number(ethers.formatUnits(earnR.value, 18));
         claimIds.push(BigInt(s));
       }
     }
     d.totalStaked = totalStaked;
+    d.totalStakedRaw = totalStakedRaw;
     d.pendingDegen = pending;
     d.claimableStakeIds = claimIds;
     d.stakedUsd = d.lpPriceUsd > 0 && totalStaked > 1e-10 ? totalStaked * d.lpPriceUsd : null;
@@ -7421,7 +8153,10 @@ async function unstakeDegenFarm(idx) {
   // These vaults only withdraw whole stakes (withdraw(stakeID) — no partial amounts).
   // If an amount is entered, withdraw whole stakes until it's covered; empty = withdraw all.
   const target = degenFarmInputAmount(idx);
-  if (target && d.totalStaked > 0 && Number(ethers.formatUnits(target, 18)) > d.totalStaked * 1.000001) {
+  const exceedsStake = target && (d.totalStakedRaw != null
+    ? target > d.totalStakedRaw
+    : (d.totalStaked > 0 && Number(ethers.formatUnits(target, 18)) > d.totalStaked * 1.000001));
+  if (exceedsStake) {
     setDegenFarmStatus(idx, '✗ Amount exceeds staked balance', 'err');
     clearDegenFarmStatusSoon(idx);
     return;
@@ -7687,7 +8422,7 @@ function renderDegenFarmCard(d) {
           annualRewardTokens, annualRewardsUsd } = d;
   const color = 'var(--red)';
   const pendingStr = fmtFullReward(pendingDegen || 0);
-  const stakedStr  = fmtFullReward(totalStaked  || 0);
+  const stakedStr  = fmtLpAmount(totalStaked  || 0);
   const isActive = isActiveDegenFarm(d);
   const positionsLabel = stakeCount > 0 ? stakeCount : '0';
   const stakedLabel = totalStaked > 1e-10 ? stakedStr : (isActive ? 'Unknown' : '—');
@@ -7712,7 +8447,7 @@ function renderDegenFarmCard(d) {
   const allocStr = d.allocPct !== null && d.allocPct !== undefined && Number.isFinite(Number(d.allocPct))
     ? Number(d.allocPct).toFixed(1) + '%' : '—';
   const fmtUsd = v => (v > 0 || v === 0) && Number.isFinite(v) ? '$' + fmtFullReward(v) + ' USD' : null;
-  const walletStr   = walletBal !== null && walletBal !== undefined ? fmtFullReward(walletBal) : '—';
+  const walletStr   = walletBal !== null && walletBal !== undefined ? fmtLpAmount(walletBal) : '—';
   const walletSub   = fmtUsd(walletUsd) || 'LP in wallet';
   const annualStr   = annualRewardTokens > 0 ? fmtFullReward(annualRewardTokens) : '—';
   const annualSub   = fmtUsd(annualRewardsUsd) || 'DEGEN / year';
