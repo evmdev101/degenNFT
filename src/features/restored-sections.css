@@ -1,0 +1,149 @@
+.legacy-section {
+  width: 100%;
+  padding: 28px;
+}
+.legacy-section-heading {
+  margin-bottom: 22px;
+}
+.legacy-section-heading h1 {
+  margin: 0;
+  color: var(--fg);
+  font:
+    800 1.5rem "Barlow Condensed",
+    sans-serif;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+.legacy-section-heading p {
+  margin: 4px 0 0;
+  font-size: 0.58rem;
+  letter-spacing: 1.5px;
+  opacity: 0.4;
+}
+.deploy-pools-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.deploy-pool-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 22px 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  box-shadow: 0 10px 35px #0003;
+  text-align: center;
+}
+.deploy-dur {
+  font:
+    800 1.25rem "Barlow Condensed",
+    sans-serif;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.deploy-copy {
+  margin: 5px 0 13px;
+  font-size: 0.58rem;
+  letter-spacing: 0.5px;
+  opacity: 0.45;
+}
+.deploy-apy-badge {
+  align-self: center;
+  padding: 6px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 99px;
+  color: var(--accent);
+  font-size: 0.58rem;
+}
+.deploy-wallet-bal {
+  margin-top: 14px;
+  font-size: 0.62rem;
+}
+.deploy-divider {
+  height: 1px;
+  margin: 15px 0;
+  background: var(--border);
+}
+.deploy-input-row {
+  display: grid;
+  grid-template-columns: 1fr 54px;
+  gap: 6px;
+}
+.deploy-input-row input,
+.deploy-label select,
+.deploy-gift input {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.62rem;
+}
+.deploy-input-row button {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--accent);
+  font-size: 0.55rem;
+}
+.deploy-label {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+  text-align: left;
+  font-size: 0.55rem;
+  opacity: 0.8;
+}
+.deploy-gift {
+  display: grid;
+  gap: 8px;
+  margin-top: 9px;
+  text-align: left;
+}
+.deploy-gift label {
+  display: grid;
+  gap: 5px;
+  font-size: 0.55rem;
+}
+.deploy-gift small {
+  font-size: 0.5rem;
+  line-height: 1.5;
+  opacity: 0.4;
+}
+.deploy-btn {
+  min-height: 42px;
+  margin-top: 12px;
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent) 15%, var(--panel));
+  color: var(--fg);
+  font:
+    800 0.6rem "Space Mono",
+    monospace;
+  letter-spacing: 0.08em;
+}
+.deploy-card-status {
+  min-height: 30px;
+  padding-top: 9px;
+  color: var(--accent);
+  font-size: 0.54rem;
+  line-height: 1.4;
+}
+@media (max-width: 1100px) {
+  .deploy-pools-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 600px) {
+  .legacy-section {
+    padding: 18px 12px;
+  }
+  .deploy-pools-grid {
+    grid-template-columns: 1fr;
+  }
+}

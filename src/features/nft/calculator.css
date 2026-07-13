@@ -1,0 +1,28 @@
+.projection-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 20px;
+}
+.projection-grid article {
+  display: grid;
+  gap: 7px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.projection-grid span {
+  font-size: 0.55rem;
+  opacity: 0.5;
+  text-transform: uppercase;
+}
+.projection-grid b {
+  font-size: 0.7rem;
+  color: var(--fg);
+}
+@media (max-width: 650px) {
+  .projection-grid {
+    grid-template-columns: 1fr;
+  }
+}

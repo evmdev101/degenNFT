@@ -1,0 +1,209 @@
+.theme-window-head {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.social-links {
+  display: flex;
+  gap: 7px;
+}
+.social-links a {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--fg);
+  color: var(--bg);
+  text-decoration: none;
+  font-weight: 900;
+}
+.social-links a:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.social-links svg {
+  width: 19px;
+  height: 19px;
+  fill: currentColor;
+}
+.theme-window-head:active {
+  cursor: grabbing;
+}
+.theme-window-tabs {
+  display: flex;
+  gap: 8px;
+}
+.theme-window-tabs button {
+  padding: 7px 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--fg);
+  font-size: 0.64rem;
+}
+.theme-window-tabs button.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.theme-custom-grid {
+  display: grid;
+  gap: 8px;
+}
+.theme-custom-grid label {
+  display: grid;
+  grid-template-columns: 1fr 48px 82px;
+  align-items: center;
+  gap: 10px;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 0.62rem;
+}
+.theme-custom-grid input {
+  width: 42px;
+  height: 32px;
+  border: 0;
+  background: none;
+}
+.theme-custom-grid code {
+  font-size: 0.58rem;
+}
+.theme-reset {
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  background: none;
+  color: var(--fg);
+}
+.theme-window[style] {
+  max-width: none;
+}
+.theme-pro-tip {
+  position: fixed;
+  z-index: 501;
+  top: 110px;
+  right: 556px;
+  width: 260px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 20px 70px #000a;
+}
+.theme-pro-tip p {
+  font-size: 0.65rem;
+  line-height: 1.65;
+}
+.theme-pro-tip p strong {
+  color: var(--accent);
+}
+.theme-pro-tip > button {
+  float: right;
+  padding: 8px 18px;
+  border: 1px solid var(--accent);
+  border-radius: 99px;
+  background: none;
+  color: var(--fg);
+  font-size: 0.6rem;
+  font-weight: 800;
+}
+.snap-demo {
+  position: relative;
+  height: 92px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
+}
+.snap-demo i {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  width: 76px;
+  height: 62px;
+  border: 3px solid var(--accent);
+  border-top: 0;
+  border-radius: 0 0 8px 8px;
+  animation: snap-window 2.4s ease-in-out infinite;
+}
+.snap-demo b {
+  position: absolute;
+  left: 63%;
+  top: 38px;
+  color: var(--accent);
+  animation: snap-pointer 2.4s ease-in-out infinite;
+}
+@keyframes snap-window {
+  0%,
+  20% {
+    transform: translateX(-50%) scale(0.65);
+    opacity: 0.6;
+  }
+  55%,
+  80% {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-50%) scale(0.65);
+    opacity: 0.6;
+  }
+}
+@keyframes snap-pointer {
+  0%,
+  20% {
+    transform: translate(22px, 22px);
+  }
+  55%,
+  80% {
+    transform: translate(-14px, -22px);
+  }
+  100% {
+    transform: translate(22px, 22px);
+  }
+}
+@media (max-width: 900px) {
+  .theme-pro-tip {
+    right: 12px;
+    top: auto;
+    bottom: 12px;
+  }
+  .theme-window[style] {
+    max-width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+  }
+}
+@media (max-width: 650px) {
+  .site-header {
+    gap: 8px;
+  }
+  .social-links {
+    gap: 4px;
+  }
+  .social-links a {
+    width: 32px;
+    height: 32px;
+    font-size: 0.7rem;
+  }
+  .brand {
+    gap: 5px;
+  }
+  .brand img {
+    width: 36px;
+    height: 36px;
+  }
+  .brand strong {
+    font-size: 1.2rem;
+  }
+  .header-actions {
+    gap: 5px;
+  }
+  .pill-button,
+  .wallet-button {
+    height: 36px;
+    padding: 0 7px;
+    font-size: 0.48rem;
+  }
+}

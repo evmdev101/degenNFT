@@ -1,0 +1,103 @@
+.standalone-page {
+  width: min(1120px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 50px 0 80px;
+}
+.standalone-page > h1 {
+  margin: 5px 0 8px;
+  font:
+    800 clamp(2.2rem, 5vw, 4rem) "Barlow Condensed",
+    sans-serif;
+  text-transform: uppercase;
+}
+.standalone-page > p {
+  max-width: 760px;
+  margin: 0 0 30px;
+  opacity: 0.62;
+  font-size: 0.72rem;
+  line-height: 1.8;
+}
+.page-metrics {
+  grid-template-columns: repeat(3, 1fr);
+  margin: 18px 0;
+}
+.copy-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+.copy-row input,
+.claim-panel select,
+.sale-form input,
+.sale-form select {
+  height: 46px;
+  padding: 0 13px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+.copy-row button {
+  min-width: 110px;
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--bg);
+  font: inherit;
+  font-weight: 800;
+}
+.claim-panel label,
+.sale-form > label {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0;
+  font-size: 0.65rem;
+  font-weight: 800;
+}
+.claim-panel .mint-button {
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+}
+.sale-form {
+  margin-top: 18px;
+}
+.sale-form .token-switch {
+  margin: 18px 0;
+}
+.sale-form .token-switch {
+  grid-template-columns: repeat(3, 1fr);
+}
+.sale-form .burn-preview {
+  margin-left: 0;
+  margin-right: 0;
+}
+.sale-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.sale-buttons .mint-button {
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+}
+@media (max-width: 650px) {
+  .standalone-page {
+    width: calc(100% - 24px);
+    padding-top: 28px;
+  }
+  .page-metrics,
+  .sale-buttons {
+    grid-template-columns: 1fr;
+  }
+  .copy-row {
+    grid-template-columns: 1fr;
+  }
+  .copy-row input {
+    min-width: 0;
+    font-size: 0.56rem;
+  }
+  .copy-row button {
+    height: 44px;
+  }
+}

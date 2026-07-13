@@ -1,0 +1,142 @@
+.farms-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+.farms-header h1 {
+  margin: 0;
+  font:
+    800 1.35rem "Barlow Condensed",
+    sans-serif;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.farms-header p {
+  margin: 4px 0 0;
+  font-size: 0.55rem;
+  opacity: 0.4;
+}
+.farms-header input {
+  width: 240px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+.farm-highlights {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.farm-highlights article {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 5px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel);
+}
+.farm-highlights span {
+  grid-column: 1/-1;
+  font-size: 0.5rem;
+  letter-spacing: 1px;
+  opacity: 0.45;
+  text-transform: uppercase;
+}
+.farm-highlights b {
+  font-size: 0.62rem;
+}
+.farm-highlights strong {
+  color: var(--accent);
+}
+.browse-farms-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.browse-farm-card {
+  padding: 17px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel);
+}
+.browse-farm-card > header {
+  display: grid;
+  grid-template-columns: 42px 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+.browse-farm-card h2 {
+  margin: 0;
+  font:
+    800 1rem "Barlow Condensed",
+    sans-serif;
+}
+.browse-farm-card header span {
+  font-size: 0.5rem;
+  opacity: 0.45;
+}
+.browse-farm-card header a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.farm-token-orb {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  font-size: 0.52rem;
+}
+.farm-card-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  margin: 14px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.farm-card-metrics > div {
+  min-width: 0;
+  padding: 9px;
+  border-right: 1px solid var(--border);
+}
+.farm-card-metrics > div:last-child {
+  border: 0;
+}
+.farm-card-metrics span {
+  display: block;
+  font-size: 0.46rem;
+  opacity: 0.42;
+}
+.farm-card-metrics b {
+  display: block;
+  margin-top: 5px;
+  font-size: 0.55rem;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 800px) {
+  .farm-highlights,
+  .browse-farms-grid {
+    grid-template-columns: 1fr;
+  }
+  .farm-card-metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 600px) {
+  .farms-header {
+    display: block;
+  }
+  .farms-header input {
+    width: 100%;
+    margin-top: 12px;
+  }
+}
