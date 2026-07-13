@@ -17,6 +17,7 @@ export const REFERRAL_ABI = [
   "function totalUserRewards(address) view returns (uint256)",
   "function amountRedeemed(address) view returns (uint256)",
   "function redeemRewards(uint256 amount, address pool) external",
+  "function referralBonus() view returns (uint256)",
 ] as const;
 
 export const REFERRAL_GOVERNANCE_ABI = [
