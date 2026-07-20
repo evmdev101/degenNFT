@@ -1,6 +1,26 @@
 import { useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { applyTheme, THEMES, type ThemeName } from "../themes/themes";
+import {
+  applyBackground,
+  BACKGROUND_PATTERNS,
+  backgroundDefaults,
+  readBackground,
+  type BackgroundSettings,
+} from "../themes/backgroundEffects";
+
+const readCustomColors = (theme: ThemeName) => {
+  const base = { ...THEMES[theme] };
+  try {
+    const saved = JSON.parse(
+      localStorage.getItem("degen-react-custom") || "null",
+    ) as Partial<typeof base> | null;
+    return saved ? { ...base, ...saved } : base;
+  } catch {
+    localStorage.removeItem("degen-react-custom");
+    return base;
+  }
+};
 
 export function useTheme() {
   const [theme, setTheme] = useState<ThemeName>(() => {
@@ -20,6 +40,7 @@ export function useTheme() {
     } catch {
       localStorage.removeItem("degen-react-custom");
     }
+    applyBackground(readBackground(theme), false);
   }, [theme]);
   return { theme, setTheme };
 }
@@ -35,30 +56,43 @@ export function ThemePanel({
     [peek, setPeek] = useState(false),
     [tip, setTip] = useState(false),
     [tab, setTab] = useState<"themes" | "custom">("themes");
-  const [custom, setCustom] = useState(() => ({ ...THEMES[theme] }));
-  useEffect(() => setCustom({ ...THEMES[theme] }), [theme]);
+  const [custom, setCustom] = useState(() => readCustomColors(theme));
+  const [customApplied, setCustomApplied] = useState(
+    () => Boolean(localStorage.getItem("degen-react-custom")),
+  );
+  const [background, setBackground] = useState<BackgroundSettings>(() =>
+    readBackground(theme),
+  );
+  useEffect(() => {
+    setCustom(readCustomColors(theme));
+    setBackground(readBackground(theme));
+  }, [theme]);
   const setCustomColor = (
     key: "bg" | "fg" | "panel" | "border" | "accent",
     value: string,
   ) => {
-    const next = { ...custom, [key]: value };
-    setCustom(next);
-    document.documentElement.style.setProperty(`--${key}`, value);
+    setCustom((current) => ({ ...current, [key]: value }));
+  };
+  const applyCustomTheme = () => {
+    (["bg", "fg", "panel", "border", "accent"] as const).forEach((key) =>
+      document.documentElement.style.setProperty(`--${key}`, custom[key]),
+    );
     localStorage.setItem(
       "degen-react-custom",
       JSON.stringify({
-        bg: next.bg,
-        fg: next.fg,
-        panel: next.panel,
-        border: next.border,
-        accent: next.accent,
+        bg: custom.bg,
+        fg: custom.fg,
+        panel: custom.panel,
+        border: custom.border,
+        accent: custom.accent,
       }),
     );
+    setCustomApplied(true);
   };
-  const resetCustom = () => {
-    localStorage.removeItem("degen-react-custom");
-    setCustom({ ...THEMES[theme] });
-    applyTheme(theme);
+  const updateBackground = (patch: Partial<BackgroundSettings>) => {
+    const next = { ...background, ...patch };
+    setBackground(next);
+    applyBackground(next);
   };
   const [rect, setRect] = useState<{
     left: number;
@@ -178,12 +212,19 @@ export function ThemePanel({
                     ).map(([name, colors]) => (
                       <button
                         key={name}
-                        className={`theme-swatch ${theme === name ? "active" : ""}`}
+                        className={`theme-swatch ${
+                          !customApplied && theme === name ? "active" : ""
+                        }`}
                         style={{ background: colors.bg, color: colors.fg }}
                         onClick={() => {
                           localStorage.removeItem("degen-react-custom");
+                          localStorage.removeItem("degen-react-background");
                           applyTheme(name);
                           setCustom({ ...colors });
+                          const nextBackground = backgroundDefaults(name);
+                          setBackground(nextBackground);
+                          applyBackground(nextBackground, false);
+                          setCustomApplied(false);
                           setTheme(name);
                         }}
                       >
@@ -199,14 +240,14 @@ export function ThemePanel({
                 </>
               ) : (
                 <>
-                  <h3>Customize Theme</h3>
+                  <h3>Colors</h3>
                   <div className="theme-custom-grid">
                     {(
                       [
                         ["bg", "Background"],
                         ["fg", "Text"],
-                        ["panel", "Panels"],
-                        ["border", "Borders"],
+                        ["panel", "Panel"],
+                        ["border", "Border"],
                         ["accent", "Accent"],
                       ] as const
                     ).map(([key, label]) => (
@@ -214,6 +255,7 @@ export function ThemePanel({
                         <span>{label}</span>
                         <input
                           type="color"
+                          aria-label={label}
                           value={custom[key]}
                           onChange={(event) =>
                             setCustomColor(key, event.target.value)
@@ -223,9 +265,85 @@ export function ThemePanel({
                       </label>
                     ))}
                   </div>
-                  <button className="theme-reset" onClick={resetCustom}>
-                    Reset to {theme}
+                  <button className="theme-apply" onClick={applyCustomTheme}>
+                    Apply Custom Theme
                   </button>
+                  <div className="theme-background-settings">
+                    <h3>Background</h3>
+                    <label className="theme-select-row">
+                      <span>Animation</span>
+                      <select
+                        aria-label="Animation"
+                        value={background.pattern}
+                        onChange={(event) =>
+                          updateBackground({
+                            pattern: event.target
+                              .value as BackgroundSettings["pattern"],
+                          })
+                        }
+                      >
+                        {BACKGROUND_PATTERNS.map((effect) => (
+                          <option key={effect}>{effect}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="theme-select-row">
+                      <span>Effect color</span>
+                      <input
+                        aria-label="Effect color"
+                        type="color"
+                        value={background.effectColor || custom.fg}
+                        onChange={(event) =>
+                          updateBackground({
+                            effectColor: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="theme-range-row">
+                      <span>Intensity</span>
+                      <input
+                        aria-label="Intensity"
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={Math.round(background.intensity * 100)}
+                        onChange={(event) =>
+                          updateBackground({
+                            intensity: Number(event.target.value) / 100,
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="theme-range-row">
+                      <span>Size</span>
+                      <input
+                        aria-label="Size"
+                        type="range"
+                        min="30"
+                        max="250"
+                        value={Math.round(background.size * 100)}
+                        onChange={(event) =>
+                          updateBackground({
+                            size: Number(event.target.value) / 100,
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="theme-check-row">
+                      <span>Frosted glass</span>
+                      <input
+                        aria-label="Frosted glass"
+                        type="checkbox"
+                        checked={background.frosted}
+                        onChange={(event) =>
+                          updateBackground({
+                            frosted: event.target.checked,
+                          })
+                        }
+                      />
+                    </label>
+                  </div>
                 </>
               )}
             </div>

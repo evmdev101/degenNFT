@@ -1,0 +1,96 @@
+.cashx-artwork {
+  width: 100%;
+  max-width: 520px;
+}
+
+.cashx-artwork-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1085 / 1450;
+  perspective: 1100px;
+  cursor: grab;
+  user-select: none;
+}
+
+.cashx-artwork-stage:active {
+  cursor: grabbing;
+}
+
+.cashx-artwork-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border: 2px solid var(--accent);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 0 70px
+    color-mix(in srgb, var(--accent) 45%, transparent);
+  transform-style: preserve-3d;
+  transform-origin: center;
+  will-change: transform;
+  transition: transform 120ms ease-out;
+}
+
+.cashx-artwork-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  user-select: none;
+}
+
+.cashx-artwork-light {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  transition: opacity 180ms ease;
+}
+
+.cashx-artwork-reflection {
+  position: relative;
+  height: 80px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.cashx-artwork-reflection img {
+  width: 100%;
+  display: block;
+  transform: scaleY(-1);
+  transform-origin: center;
+  mask-image: linear-gradient(rgb(0 0 0 / 40%), transparent 72%);
+}
+
+.cashx-artwork-light-control {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  margin-top: -72px;
+}
+
+.cashx-artwork-light-control button {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--accent);
+  font: 11px/16.5px "Fira Code", ui-monospace, "Cascadia Code", Consolas,
+    monospace;
+  cursor: pointer;
+}
+
+.cashx-artwork-light-control button:hover {
+  background: color-mix(in srgb, var(--accent) 9%, var(--panel));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cashx-artwork-card,
+  .cashx-artwork-light {
+    transition: none;
+  }
+}

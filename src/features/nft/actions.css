@@ -4,6 +4,136 @@
   gap: 10px;
   margin-top: 18px;
 }
+.rewards-dashboard-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  margin: 0 18px 16px;
+}
+.rewards-dashboard-actions button,
+.rewards-edit-settings,
+.rewards-dashboard-footer button {
+  min-height: 44px;
+  padding: 10px 18px;
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+  color: var(--accent);
+  cursor: pointer;
+  font:
+    800 0.76rem "Barlow Condensed",
+    sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.rewards-dashboard-actions button.burn {
+  border-color: #ff7300;
+  background: color-mix(in srgb, #ff7300 10%, var(--panel));
+  color: #ff7300;
+}
+.rewards-dashboard-actions button:disabled,
+.rewards-edit-settings:disabled,
+.rewards-dashboard-footer button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+.rewards-dashboard-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 18px;
+  border-top: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  color: color-mix(in srgb, var(--fg) 42%, transparent);
+  font-size: 0.51rem;
+  line-height: 1.55;
+}
+.rewards-dashboard-footer > div {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 8px;
+}
+.rewards-dashboard-footer time {
+  white-space: nowrap;
+}
+.rewards-dashboard-footer button {
+  min-height: 0;
+  padding: 4px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 0.5rem;
+  letter-spacing: 0;
+}
+.rewards-settings-summary {
+  padding: 18px;
+}
+.rewards-settings-summary > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 12px;
+}
+.rewards-settings-summary h3 {
+  margin: 0;
+  font:
+    800 1.2rem "Barlow Condensed",
+    sans-serif;
+}
+.rewards-settings-summary > header span {
+  color: color-mix(in srgb, var(--fg) 42%, transparent);
+  font-size: 0.56rem;
+  text-align: right;
+}
+.rewards-settings-summary dl {
+  margin: 0 0 14px;
+}
+.rewards-settings-summary dl div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 9px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--fg) 9%, transparent);
+}
+.rewards-settings-summary dt {
+  color: color-mix(in srgb, var(--fg) 49%, transparent);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.rewards-settings-summary dd {
+  margin: 0;
+  font-size: 0.69rem;
+  font-weight: 800;
+  text-align: right;
+}
+.rewards-edit-settings {
+  width: 100%;
+  min-height: 39px;
+  border-color: color-mix(in srgb, var(--fg) 72%, var(--border));
+  background: color-mix(in srgb, var(--fg) 8%, var(--panel));
+  color: var(--fg);
+}
+.settings-summary-error {
+  margin: 9px 0 0;
+  color: #ff8c97;
+  font-size: 0.56rem;
+  text-align: center;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .reward-actions button,
 .modal-actions button,
 .token-switch button {
@@ -48,6 +178,12 @@
     0 30px 90px #000,
     0 0 40px color-mix(in srgb, var(--accent) 25%, transparent);
 }
+.action-modal.harvest-modal {
+  width: min(460px, 100%);
+}
+.action-modal.settings-modal {
+  width: min(520px, 100%);
+}
 .action-modal > header {
   position: sticky;
   top: 0;
@@ -80,10 +216,51 @@
 .action-modal > .settings-grid,
 .action-modal > .token-switch,
 .action-modal > .destination-list,
+.action-modal > .harvest-balances,
+.action-modal > .modal-section-label,
 .action-modal > .burn-preview,
 .action-modal > .burn-confirm {
   margin-left: 20px;
   margin-right: 20px;
+}
+.harvest-balances {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 18px;
+}
+.harvest-balances article {
+  display: grid;
+  gap: 5px;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  text-align: center;
+}
+.harvest-balances span,
+.modal-section-label {
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.harvest-balances span {
+  opacity: 0.48;
+}
+.harvest-balances strong {
+  font:
+    800 1.15rem "Barlow Condensed",
+    sans-serif;
+}
+.harvest-balances strong.oink {
+  color: #22e82f;
+}
+.harvest-balances strong.degen {
+  color: #ffe100;
+}
+.modal-section-label {
+  margin-top: 16px;
+  color: color-mix(in srgb, var(--fg) 62%, transparent);
 }
 .token-switch {
   display: grid;
@@ -125,12 +302,25 @@
   grid-template-columns: 1fr 1fr;
   gap: 0 14px;
 }
-.settings-grid label:last-child {
+.settings-grid label:last-child,
+.settings-grid .settings-checkbox-row {
   grid-column: 1/-1;
+}
+.settings-checkbox-row > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.settings-checkbox-row input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  accent-color: var(--accent);
 }
 .settings-grid small {
   opacity: 0.55;
   font-weight: 400;
+  line-height: 1.55;
 }
 .destination-list {
   display: grid;
@@ -164,6 +354,24 @@
 .destination-list small {
   opacity: 0.55;
   font-size: 0.55rem;
+}
+.harvest-modal .destination-list {
+  grid-template-columns: 1fr;
+  margin-top: 10px;
+}
+.harvest-modal .destination-list label {
+  justify-content: flex-start;
+  min-height: 46px;
+}
+.harvest-modal .destination-list label > span {
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+.harvest-modal .destination-list small {
+  text-align: right;
+  white-space: nowrap;
 }
 .action-warning,
 .destructive-copy {
@@ -231,12 +439,28 @@
   color: var(--accent);
 }
 @media (max-width: 650px) {
+  .rewards-dashboard-actions {
+    grid-template-columns: 1fr;
+  }
+  .rewards-dashboard-footer,
+  .rewards-settings-summary > header,
+  .rewards-settings-summary dl div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .rewards-settings-summary > header span,
+  .rewards-settings-summary dd {
+    text-align: left;
+  }
   .reward-actions,
   .destination-list,
   .settings-grid {
     grid-template-columns: 1fr;
   }
   .settings-grid label:last-child {
+    grid-column: auto;
+  }
+  .settings-grid .settings-checkbox-row {
     grid-column: auto;
   }
   .modal-backdrop {

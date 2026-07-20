@@ -1,5 +1,7 @@
-import { lazy, Suspense, useState } from "react";
-import { Header, type MainTab } from "./components/Header";
+import { lazy, Suspense } from "react";
+import { Navigate, Route, Routes } from "react-router-dom";
+import { Header } from "./components/Header";
+import { LoadingScreen } from "./components/LoadingScreen";
 import { useTheme } from "./components/ThemePanel";
 import { useWallet } from "./hooks/useWallet";
 
@@ -18,14 +20,9 @@ const SalePage = lazy(() =>
     default: module.SalePage,
   })),
 );
-const MinersPage = lazy(() =>
-  import("./features/MinersPage").then((module) => ({
-    default: module.MinersPage,
-  })),
-);
-const MyMinersPage = lazy(() =>
-  import("./features/MyMinersPage").then((module) => ({
-    default: module.MyMinersPage,
+const MinersHubPage = lazy(() =>
+  import("./features/MinersHubPage").then((module) => ({
+    default: module.MinersHubPage,
   })),
 );
 const FarmsPage = lazy(() =>
@@ -34,42 +31,42 @@ const FarmsPage = lazy(() =>
   })),
 );
 
+function RouteFallback() {
+  return <LoadingScreen />;
+}
+
 export default function App() {
-  const [tab, setTab] = useState<MainTab>("nft");
   const wallet = useWallet();
   const { theme, setTheme } = useTheme();
+
   return (
     <div className="app-shell">
       <Header
-        active={tab}
-        onNavigate={setTab}
         wallet={wallet}
         theme={theme}
         setTheme={setTheme}
       />
       {wallet.error && <div className="global-message">{wallet.error}</div>}
-      <Suspense
-        fallback={
-          <main className="standalone-page">
-            <p>Loading dashboard…</p>
-          </main>
-        }
-      >
-        {tab === "nft" ? (
-          <NftPage wallet={wallet} />
-        ) : tab === "referral" ? (
-          <ReferralPage wallet={wallet} />
-        ) : tab === "sale" ? (
-          <SalePage wallet={wallet} />
-        ) : tab === "miners" ? (
-          <MinersPage wallet={wallet} />
-        ) : tab === "rewards" ? (
-          <MyMinersPage wallet={wallet} />
-        ) : tab === "farms" ? (
-          <FarmsPage wallet={wallet} />
-        ) : (
-          <NftPage wallet={wallet} />
-        )}
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
+          <Route path="/" element={<Navigate to="/nft" replace />} />
+          <Route path="/nft" element={<NftPage wallet={wallet} />} />
+          <Route
+            path="/miners"
+            element={<Navigate to="/my-miners?tab=deploy" replace />}
+          />
+          <Route
+            path="/my-miners"
+            element={<MinersHubPage wallet={wallet} />}
+          />
+          <Route path="/farms" element={<FarmsPage wallet={wallet} />} />
+          <Route path="/degen-sale" element={<SalePage wallet={wallet} />} />
+          <Route
+            path="/referral"
+            element={<ReferralPage wallet={wallet} />}
+          />
+          <Route path="*" element={<Navigate to="/nft" replace />} />
+        </Routes>
       </Suspense>
     </div>
   );

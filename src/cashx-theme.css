@@ -1,0 +1,695 @@
+/*
+ * CashX visual system for DEGEN.
+ * Keeps DEGEN's application structure while matching the mint site's
+ * typography, palette, surfaces, pill controls, and window treatment.
+ */
+
+:root {
+  --bg-effect-color: var(--fg);
+  --bg-effect-intensity: 1;
+  --bg-effect-size: 1;
+  font-family: "Fira Code", ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+body {
+  color: var(--fg);
+  background: var(--bg);
+  font-family: "Fira Code", ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+body::after {
+  opacity: 0.45;
+}
+
+body.bg-pattern-dots {
+  background-image: radial-gradient(
+    color-mix(
+        in srgb,
+        var(--bg-effect-color, var(--fg))
+          calc(5% * var(--bg-effect-intensity, 1)),
+        transparent
+      )
+      1px,
+    transparent 1px
+  );
+  background-size: 20px 20px;
+  background-attachment: fixed;
+}
+
+body.bg-pattern-synapse {
+  background-image:
+    linear-gradient(
+      color-mix(
+          in srgb,
+          var(--bg-effect-color, var(--fg))
+            calc(3.5% * var(--bg-effect-intensity, 1)),
+          transparent
+        )
+        1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      color-mix(
+          in srgb,
+          var(--bg-effect-color, var(--fg))
+            calc(3.5% * var(--bg-effect-intensity, 1)),
+          transparent
+        )
+        1px,
+      transparent 1px
+    );
+  background-size: 24px 24px;
+  background-attachment: fixed;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+h1,
+h2,
+h3,
+h4,
+.overview-section h1,
+.placeholder-page h1,
+.standalone-page > h1,
+.art-details h2,
+.purchase-column > h2,
+.feature-panel h2,
+.action-modal > header h2,
+.ref-card-title,
+.dsale-logo,
+.dsale-title,
+.dsale-modal-title {
+  font-family: "DM Sans", sans-serif;
+  text-transform: none;
+  letter-spacing: -0.02em;
+}
+
+.site-header {
+  min-height: 80px;
+  padding: 12px 32px;
+  gap: 16px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--bg) 82%, transparent),
+    color-mix(in srgb, var(--panel) 60%, transparent),
+    color-mix(in srgb, var(--bg) 82%, transparent)
+  );
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--accent) 34%, transparent);
+  backdrop-filter: blur(18px) saturate(125%);
+  box-shadow: 0 10px 40px #00000059;
+}
+
+.social-links {
+  gap: 8px;
+}
+
+.social-links a {
+  width: 40px;
+  height: 40px;
+  border: 1px solid #ffffff24;
+  background: #f2f3f5;
+  color: #111318;
+  box-shadow: none;
+}
+
+.social-links a:hover {
+  color: #111318;
+  border-color: #fff;
+  box-shadow: 0 0 20px color-mix(in srgb, var(--fg) 25%, transparent);
+  transform: translateY(-1px);
+}
+
+.brand {
+  gap: 9px;
+}
+
+.brand img {
+  width: 46px;
+  height: 46px;
+  border-color: color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.brand strong {
+  color: var(--accent);
+  font: 800 1.55rem "DM Sans", sans-serif;
+  letter-spacing: 0.14em;
+}
+
+.site-header nav {
+  gap: 7px;
+}
+
+.site-header nav button,
+.site-header nav a {
+  min-height: 40px;
+  padding: 9px 13px;
+  border: 1px solid color-mix(in srgb, var(--fg) 12%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fg) 4.5%, transparent);
+  color: color-mix(in srgb, var(--fg) 72%, transparent);
+  font: 800 0.69rem "Fira Code", ui-monospace, monospace;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.site-header nav button:hover,
+.site-header nav a:hover {
+  border-color: color-mix(in srgb, var(--fg) 32%, transparent);
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  color: var(--fg);
+  transform: translateY(-1px);
+}
+
+.site-header nav button.active,
+.site-header nav a.active {
+  border-color: #ffffff2e;
+  background: linear-gradient(
+    135deg,
+    var(--accent),
+    color-mix(in srgb, var(--accent) 58%, var(--panel))
+  );
+  color: #fff;
+  box-shadow: 0 0 24px color-mix(in srgb, var(--accent) 32%, transparent);
+}
+
+.header-actions {
+  gap: 10px;
+}
+
+.pill-button,
+.wallet-button {
+  height: 40px;
+  padding: 0 16px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  color: var(--fg);
+  font-size: 0.66rem;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.wallet-button {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--panel));
+  color: var(--fg);
+  letter-spacing: 0.04em;
+}
+
+.pill-button:hover,
+.wallet-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 13%, var(--panel));
+}
+
+.nft-page {
+  width: min(1280px, calc(100% - 40px));
+  padding-top: 42px;
+}
+
+.eyebrow {
+  color: var(--accent);
+  font-size: 0.63rem;
+  letter-spacing: 0.12em;
+}
+
+.overview-section h1 {
+  margin: 0;
+  font-family: "Permanent Marker", cursive;
+  font-size: clamp(1.5rem, 2.35vw, 1.875rem);
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: 0.015em;
+}
+
+.metric-card,
+.art-card,
+.step-bar,
+.purchase-panel,
+.feature-panel,
+.placeholder-page,
+.ref-card,
+.dsale-card,
+.deploy-pool-card,
+.miners-summary-row,
+.action-modal,
+.modal-box,
+.dsale-modal-box {
+  border-color: color-mix(in srgb, var(--border) 72%, transparent);
+  background: var(--panel);
+  box-shadow: none;
+}
+
+.metric-card {
+  border-radius: 9px;
+}
+
+.overview-grid {
+  margin-top: 20px;
+  gap: 12px;
+}
+
+.overview-grid .metric-card {
+  min-height: 147px;
+  padding: 16px;
+  background: color-mix(in srgb, var(--panel) 72%, transparent);
+}
+
+.overview-grid .metric-card > span {
+  opacity: 0.62;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: 0.2em;
+}
+
+.overview-grid .metric-value-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 8px;
+  row-gap: 2px;
+  min-width: 0;
+  margin-top: 12px;
+}
+
+.overview-grid .metric-card strong {
+  min-width: 0;
+  margin: 0;
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: clamp(3.35rem, 5vw, 4rem);
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: normal;
+}
+
+.overview-grid .metric-card strong.is-long {
+  font-size: clamp(2.25rem, 3.2vw, 2.75rem);
+}
+
+.overview-grid .metric-card em {
+  opacity: 0.62;
+  color: var(--fg);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.overview-grid .metric-card small {
+  display: block;
+  margin-top: 8px;
+  opacity: 0.62;
+  color: var(--fg);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.metric-card strong,
+.total-card strong,
+.burn-preview strong {
+  color: var(--fg);
+  font-family: "DM Sans", sans-serif;
+  font-weight: 700;
+}
+
+.metric-card small,
+.eyebrow,
+.art-details b,
+.total-card small,
+.recent-mints a {
+  color: var(--accent);
+}
+
+.nft-tabs {
+  gap: 24px;
+  margin: 32px 0;
+  border-bottom-color: color-mix(in srgb, var(--border) 82%, transparent);
+  overflow-y: hidden;
+}
+
+.nft-tabs button {
+  padding: 0 0 12px;
+  color: var(--fg);
+  font-family: "Permanent Marker", cursive;
+  font-size: 20px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 28px;
+  letter-spacing: 0.015em;
+  text-transform: none;
+  opacity: 0.5;
+}
+
+.nft-tabs button.active {
+  margin-bottom: -1px;
+  color: var(--fg);
+  border-bottom-color: var(--accent);
+  opacity: 1;
+}
+
+.art-frame {
+  border-width: 1px;
+  border-color: var(--accent);
+  background: #0d0d0e;
+  box-shadow: 0 0 30px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.purchase-column > h2,
+.art-details h2 {
+  color: var(--fg);
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.step-bar,
+.purchase-panel {
+  background: var(--panel);
+}
+
+.stepper button,
+.stepper strong,
+.copy-row input,
+.claim-panel select,
+.sale-form input,
+.sale-form select,
+.field-label input,
+.field-label select,
+.settings-grid input,
+.settings-grid select {
+  border-color: color-mix(in srgb, var(--border) 72%, transparent);
+  background: color-mix(in srgb, var(--bg) 58%, var(--panel));
+}
+
+.total-card {
+  background: color-mix(in srgb, var(--accent) 5%, var(--panel));
+}
+
+.mint-button,
+.copy-row button,
+.ref-claim-btn,
+.dsale-action-btn,
+.dsale-claim-action-btn,
+.dsale-modal-exec-btn {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, var(--panel));
+  color: var(--fg);
+  box-shadow: none;
+}
+
+.mint-button:hover:not(:disabled),
+.copy-row button:hover,
+.ref-claim-btn:hover:not(:disabled),
+.dsale-action-btn:hover,
+.dsale-claim-action-btn:hover:not(:disabled),
+.dsale-modal-exec-btn:hover:not(:disabled) {
+  background: linear-gradient(
+    135deg,
+    var(--accent),
+    color-mix(in srgb, var(--accent) 58%, var(--panel))
+  );
+  color: #fff;
+}
+
+.recent-mints-title h3 {
+  color: var(--fg);
+  font-family: "DM Sans", sans-serif;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+}
+
+.recent-mints .recent-mint-row a {
+  color: var(--fg);
+}
+
+.recent-mints .recent-mint-row .recent-mint-time {
+  color: color-mix(in srgb, var(--fg) 62%, transparent);
+}
+
+.legacy-main {
+  font-family: "Fira Code", ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+.theme-window {
+  width: min(540px, calc(100vw - 24px));
+  border-color: color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 9px;
+  background: var(--panel);
+  box-shadow:
+    0 28px 90px #00000099,
+    0 0 48px color-mix(in srgb, var(--accent) 20%, transparent);
+  backdrop-filter: none;
+}
+
+.theme-window-head {
+  min-height: 48px;
+  padding: 12px 16px;
+  border-bottom-color: color-mix(in srgb, var(--border) 72%, transparent);
+  color: var(--accent);
+  font-size: 0.78rem;
+}
+
+.theme-window-head button {
+  border-color: var(--border);
+  border-radius: 999px;
+  color: var(--fg);
+}
+
+.theme-window-tabs {
+  min-height: 40px;
+  padding: 0 16px;
+  border-bottom-color: color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.theme-window-tabs button {
+  min-height: 40px;
+}
+
+.theme-window-body {
+  margin: 16px;
+  padding: 16px;
+  border-color: color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.theme-window-body h3 {
+  color: var(--fg);
+  font: 700 0.8rem "Fira Code", ui-monospace, monospace;
+  letter-spacing: 0;
+}
+
+.theme-swatch {
+  border-width: 1px;
+  border-color: var(--border);
+  border-radius: 7px;
+}
+
+.theme-swatch.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.theme-custom-grid label {
+  grid-template-columns: 1fr 46px;
+  border: 0;
+  padding: 4px 0;
+}
+
+.theme-custom-grid code {
+  display: none;
+}
+
+.theme-custom-grid input[type="color"],
+.theme-select-row input[type="color"] {
+  width: 42px;
+  height: 32px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+}
+
+.theme-apply,
+.theme-reset {
+  width: 100%;
+  min-height: 36px;
+  margin-top: 12px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.theme-background-settings {
+  margin-top: 24px;
+}
+
+.theme-select-row,
+.theme-range-row,
+.theme-check-row {
+  min-height: 38px;
+  display: grid;
+  grid-template-columns: 1fr minmax(140px, 46%);
+  align-items: center;
+  gap: 14px;
+  color: color-mix(in srgb, var(--fg) 72%, transparent);
+  font-size: 0.64rem;
+}
+
+.theme-select-row select {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--fg);
+}
+
+.theme-range-row input {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.theme-check-row input {
+  justify-self: end;
+  accent-color: var(--accent);
+}
+
+.theme-pro-tip {
+  border-color: color-mix(in srgb, var(--border) 72%, transparent);
+  background: var(--panel);
+}
+
+body.theme-frosted .site-header,
+body.theme-frosted .theme-window,
+body.theme-frosted .theme-pro-tip,
+body.theme-frosted .metric-card,
+body.theme-frosted .art-card,
+body.theme-frosted .step-bar,
+body.theme-frosted .purchase-panel,
+body.theme-frosted .feature-panel,
+body.theme-frosted .placeholder-page,
+body.theme-frosted .ref-card,
+body.theme-frosted .dsale-card,
+body.theme-frosted .deploy-pool-card,
+body.theme-frosted .action-modal,
+body.theme-frosted .modal-box,
+body.theme-frosted .dsale-modal-box {
+  background-color: color-mix(in srgb, var(--panel) 32%, transparent);
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--fg) 14%, transparent) 0%,
+    color-mix(in srgb, var(--fg) 4%, transparent) 26%,
+    transparent 55%
+  );
+  backdrop-filter: blur(24px) saturate(170%);
+  border-color: color-mix(in srgb, var(--fg) 22%, transparent);
+}
+
+@media (max-width: 1100px) {
+  .site-header {
+    flex-wrap: wrap;
+  }
+
+  .site-header nav {
+    order: 3;
+    flex: 1 0 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+}
+
+@media (max-width: 650px) {
+  .site-header {
+    min-height: 68px;
+    padding: 10px 12px;
+  }
+
+  .social-links a {
+    width: 34px;
+    height: 34px;
+  }
+
+  .brand strong {
+    display: none;
+  }
+
+  .brand img {
+    width: 36px;
+    height: 36px;
+  }
+
+  .site-header nav button,
+  .site-header nav a {
+    min-height: 36px;
+    padding: 8px 11px;
+    font-size: 0.61rem;
+  }
+
+  .nft-page {
+    width: calc(100% - 24px);
+  }
+
+  .theme-window-body {
+    margin: 10px;
+    padding: 12px;
+  }
+}
+
+.app-loading-screen {
+  min-height: calc(100vh - 90px);
+  display: grid;
+  place-items: center;
+  padding: 48px 24px;
+}
+
+.app-loading-screen.is-fullscreen {
+  min-height: 100vh;
+}
+
+.app-loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.app-loading-spinner {
+  width: 46px;
+  height: 46px;
+  border: 3px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border-top-color: var(--accent);
+  border-right-color: color-mix(in srgb, var(--fg) 72%, var(--accent));
+  border-radius: 50%;
+  filter: drop-shadow(
+    0 0 10px color-mix(in srgb, var(--accent) 44%, transparent)
+  );
+  animation: app-loading-spin 0.75s linear infinite;
+}
+
+.app-loading-label {
+  color: color-mix(in srgb, var(--fg) 70%, transparent);
+  font: 700 0.66rem "Fira Code", ui-monospace, monospace;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+@keyframes app-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { Contract, EventLog, ZeroAddress, formatEther } from "ethers";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
@@ -17,6 +18,7 @@ import {
   toGatewayUrl,
 } from "../../lib/chain";
 import { RewardsActions } from "./RewardsActions";
+import { CashxArtwork } from "./CashxArtwork";
 
 type NftTab = "mint" | "rewards" | "calculator" | "holders" | "activity";
 type Holder = { address: string; value: number };
@@ -25,6 +27,7 @@ type MintEvent = {
   quantity: number;
   blockNumber: number;
   transactionHash: string;
+  timestamp?: number;
 };
 
 type MinerData = {
@@ -67,39 +70,39 @@ const initialData: MinerData = {
   perNftDegenSecond: 0n,
 };
 
-function useMinerData(address: string | null) {
-  const [data, setData] = useState(initialData);
-
-  const load = useCallback(async () => {
-    setData((current) => ({ ...current, loading: true, error: "" }));
-    try {
-      const { nft, mint, provider } = await getPublicContracts();
-      const [price, active, rawUri] = await Promise.all([
-        mint.nftPrice() as Promise<bigint>,
-        nft.totalNFTs() as Promise<bigint>,
-        nft.uri(NFT_TOKEN_ID) as Promise<string>,
-      ]);
-      const metadata = await fetchTokenMetadata(
-        rawUri.replace("{id}", NFT_TOKEN_ID.toString(16).padStart(64, "0")),
-      );
-      const image = toGatewayUrl(metadata.image || "");
+async function loadMinerData(address: string | null): Promise<MinerData> {
+  try {
+    const { nft, mint, provider } = await getPublicContracts();
+    const [price, active, rawUri] = await Promise.all([
+      mint.nftPrice() as Promise<bigint>,
+      nft.totalNFTs() as Promise<bigint>,
+      nft.uri(NFT_TOKEN_ID) as Promise<string>,
+    ]);
+    const metadata = await fetchTokenMetadata(
+      rawUri.replace("{id}", NFT_TOKEN_ID.toString(16).padStart(64, "0")),
+    );
+    const image = toGatewayUrl(metadata.image || "");
 
       let events: MintEvent[] = [];
+      let holders: Holder[] = [];
       let minted: number | null = null;
       let burned: number | null = null;
       try {
-        const [mintLogs, burnLogs] = await Promise.all([
-          nft.queryFilter(nft.filters.TransferSingle(null, ZeroAddress, null)),
-          nft.queryFilter(nft.filters.TransferSingle(null, null, ZeroAddress)),
-        ]);
-        const matchingMints = mintLogs.filter(
+        const transferLogs = await nft.queryFilter(
+          nft.filters.TransferSingle(null, null, null),
+        );
+        const matchingTransfers = transferLogs.filter(
           (log) =>
             log instanceof EventLog && BigInt(log.args.id) === NFT_TOKEN_ID,
         ) as EventLog[];
-        const matchingBurns = burnLogs.filter(
+        const matchingMints = matchingTransfers.filter(
           (log) =>
-            log instanceof EventLog && BigInt(log.args.id) === NFT_TOKEN_ID,
-        ) as EventLog[];
+            String(log.args.from).toLowerCase() === ZeroAddress.toLowerCase(),
+        );
+        const matchingBurns = matchingTransfers.filter(
+          (log) =>
+            String(log.args.to).toLowerCase() === ZeroAddress.toLowerCase(),
+        );
         minted = matchingMints.reduce(
           (sum, log) => sum + Number(log.args.value),
           0,
@@ -117,29 +120,63 @@ function useMinerData(address: string | null) {
           }))
           .sort((a, b) => b.blockNumber - a.blockNumber)
           .slice(0, 50);
+        const timedEvents = await Promise.all(
+          events.slice(0, 25).map(async (event) => {
+            try {
+              const block = await provider.getBlock(event.blockNumber);
+              return {
+                ...event,
+                timestamp: block ? Number(block.timestamp) : undefined,
+              };
+            } catch {
+              return event;
+            }
+          }),
+        );
+        events = [...timedEvents, ...events.slice(25)];
+
+        const balances = new Map<string, number>();
+        for (const log of matchingTransfers) {
+          const from = String(log.args.from).toLowerCase();
+          const to = String(log.args.to).toLowerCase();
+          const value = Number(log.args.value);
+          if (from !== ZeroAddress.toLowerCase())
+            balances.set(from, (balances.get(from) || 0) - value);
+          if (to !== ZeroAddress.toLowerCase())
+            balances.set(to, (balances.get(to) || 0) + value);
+        }
+        holders = [...balances.entries()]
+          .filter(([, value]) => value > 0)
+          .map(([holderAddress, value]) => ({
+            address: holderAddress,
+            value,
+          }))
+          .sort((a, b) => b.value - a.value);
       } catch (eventError) {
         console.warn("Event history unavailable:", eventError);
       }
 
-      let holders: Holder[] = [];
-      try {
-        const response = await fetch(
-          `https://api.scan.pulsechain.com/api?module=token&action=getTokenHolders&contractaddress=${CONTRACTS.nft}&offset=200&page=1`,
-        );
-        const payload = (await response.json()) as {
-          result?: Array<{ address?: string; value?: string }>;
-        };
-        holders = (payload.result || [])
-          .map((item) => ({
-            address: String(item.address || ""),
-            value: Number(item.value || 0),
-          }))
-          .filter(
-            (item) => /^0x[0-9a-f]{40}$/i.test(item.address) && item.value > 0,
-          )
-          .sort((a, b) => b.value - a.value);
-      } catch (holderError) {
-        console.warn("Holder index unavailable:", holderError);
+      if (!holders.length) {
+        try {
+          const response = await fetch(
+            `https://api.scan.pulsechain.com/api?module=token&action=getTokenHolders&contractaddress=${CONTRACTS.nft}&offset=200&page=1`,
+          );
+          const payload = (await response.json()) as {
+            result?: Array<{ address?: string; value?: string }>;
+          };
+          holders = (payload.result || [])
+            .map((item) => ({
+              address: String(item.address || ""),
+              value: Number(item.value || 0),
+            }))
+            .filter(
+              (item) =>
+                /^0x[0-9a-f]{40}$/i.test(item.address) && item.value > 0,
+            )
+            .sort((a, b) => b.value - a.value);
+        } catch (holderError) {
+          console.warn("Holder index unavailable:", holderError);
+        }
       }
 
       let walletBalance = 0n,
@@ -177,39 +214,54 @@ function useMinerData(address: string | null) {
           console.warn("Reward rates unavailable:", rateError);
         }
       }
-      setData({
-        loading: false,
-        error: "",
-        price,
-        active: Number(active),
-        minted,
-        burned,
-        image,
-        name: metadata.name || initialData.name,
-        description: metadata.description || initialData.description,
-        traits: metadata.attributes?.length || 0,
-        events,
-        holders,
-        walletBalance,
-        pendingOink,
-        pendingDegen,
-        perNftOinkSecond,
-        perNftDegenSecond,
-      });
-      void provider;
-    } catch (error) {
-      setData((current) => ({
-        ...current,
-        loading: false,
-        error: readableError(error),
-      }));
-    }
-  }, [address]);
+    return {
+      loading: false,
+      error: "",
+      price,
+      active: Number(active),
+      minted,
+      burned,
+      image,
+      name: metadata.name || initialData.name,
+      description: metadata.description || initialData.description,
+      traits: metadata.attributes?.length || 0,
+      events,
+      holders,
+      walletBalance,
+      pendingOink,
+      pendingDegen,
+      perNftOinkSecond,
+      perNftDegenSecond,
+    };
+  } catch (error) {
+    throw new Error(readableError(error), { cause: error });
+  }
+}
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-  return { data, reload: load };
+function useMinerData(address: string | null) {
+  const query = useQuery({
+    queryKey: ["nft-miner-data", address ?? "guest"],
+    queryFn: () => loadMinerData(address),
+    refetchInterval: 60_000,
+  });
+
+  const data = query.data
+    ? {
+        ...query.data,
+        loading: query.isPending,
+        error: query.error ? readableError(query.error) : "",
+      }
+    : {
+        ...initialData,
+        loading: query.isPending,
+        error: query.error ? readableError(query.error) : "",
+      };
+
+  const reload = useCallback(async () => {
+    await query.refetch();
+  }, [query.refetch]);
+
+  return { data, reload };
 }
 
 const formatPls = (value: bigint, digits = 2) =>
@@ -220,6 +272,55 @@ const formatToken = (value: bigint) =>
   Number(formatEther(value)).toLocaleString(undefined, {
     maximumFractionDigits: 6,
   });
+const APR_BLOCKS_PER_YEAR = 3_061_747;
+const NFT_PRICE_USD = 50;
+const OINK_PRICE_PAIR = "0xef9ea3d72e28c7140481209190601c085027d6fe";
+const DEGEN_PRICE_PAIR = "0x3029aa801176f6904e2b6c7527334c215eaf1d8f";
+
+async function fetchPairPrice(address: string) {
+  const response = await fetch(
+    `https://api.dexscreener.com/latest/dex/pairs/pulsechain/${address}`,
+  );
+  if (!response.ok) throw new Error("Live token prices are unavailable.");
+  const payload = (await response.json()) as {
+    pairs?: Array<{ priceUsd?: string; priceNative?: string }>;
+  };
+  return payload.pairs?.[0];
+}
+
+function useRewardsApr(oinkPerNftSecond: bigint, degenPerNftSecond: bigint) {
+  const query = useQuery({
+    queryKey: [
+      "nft-rewards-apr",
+      oinkPerNftSecond.toString(),
+      degenPerNftSecond.toString(),
+    ],
+    enabled: oinkPerNftSecond > 0n || degenPerNftSecond > 0n,
+    staleTime: 5 * 60 * 1_000,
+    refetchInterval: 5 * 60 * 1_000,
+    queryFn: async () => {
+      const [oinkPair, degenPair] = await Promise.all([
+        fetchPairPrice(OINK_PRICE_PAIR),
+        fetchPairPrice(DEGEN_PRICE_PAIR),
+      ]);
+      const oinkUsd = Number(oinkPair?.priceUsd || 0);
+      const degenUsd = Number(degenPair?.priceNative || 0) * oinkUsd;
+      if (!(oinkUsd > 0) || !(degenUsd > 0))
+        throw new Error("Live token prices are unavailable.");
+      const rawOinkRate = oinkPerNftSecond * 3n;
+      const rawDegenRate = degenPerNftSecond * 3n;
+      const annualOink =
+        Number(formatEther(rawOinkRate)) * APR_BLOCKS_PER_YEAR;
+      const annualDegen =
+        Number(formatEther(rawDegenRate)) * APR_BLOCKS_PER_YEAR;
+      const annualUsd = annualOink * oinkUsd + annualDegen * degenUsd;
+      return (annualUsd / NFT_PRICE_USD) * 100;
+    },
+  });
+  return query.data && query.data > 0
+    ? `${Math.round(query.data).toLocaleString()}%`
+    : "—";
+}
 
 export function NftPage({ wallet }: { wallet: WalletState }) {
   const [tab, setTab] = useState<NftTab>("mint");
@@ -285,27 +386,30 @@ export function NftPage({ wallet }: { wallet: WalletState }) {
   return (
     <main className="nft-page">
       <section className="overview-section">
-        <span className="eyebrow">DegenStrategy NFT Miner</span>
         <h1>Mint Overview</h1>
         <div className="overview-grid">
           <Metric
             label="Price per NFT"
-            value={data.price ? `${formatPls(data.price, 4)} PLS` : "Loading…"}
+            value={data.price ? formatPls(data.price, 2) : "Loading…"}
+            unit="PLS"
             note="Paid in native PLS"
           />
           <Metric
             label="Active Miners"
             value={data.active.toLocaleString()}
+            unit="miners"
             note="Currently earning rewards"
           />
           <Metric
             label="Total Minted"
             value={data.minted?.toLocaleString() ?? "Indexing…"}
+            unit="NFTs"
             note="All-time miners created"
           />
           <Metric
             label="Total Burned"
             value={data.burned?.toLocaleString() ?? "Indexing…"}
+            unit="NFTs"
             note="Cashed out permanently"
           />
         </div>
@@ -354,7 +458,9 @@ export function NftPage({ wallet }: { wallet: WalletState }) {
           degenRate={data.perNftDegenSecond}
         />
       )}
-      {tab === "holders" && <HoldersPanel holders={data.holders} />}
+      {tab === "holders" && (
+        <HoldersPanel holders={data.holders} image={data.image} />
+      )}
       {tab === "activity" && <ActivityPanel events={data.events} />}
     </main>
   );
@@ -363,19 +469,38 @@ export function NftPage({ wallet }: { wallet: WalletState }) {
 function Metric({
   label,
   value,
+  unit,
   note,
 }: {
   label: string;
   value: string;
+  unit?: string;
   note: string;
 }) {
   return (
     <article className="metric-card">
       <span>{label}</span>
-      <strong>{value}</strong>
+      <div className="metric-value-row">
+        <strong className={value.length > 9 ? "is-long" : undefined}>
+          {value}
+        </strong>
+        {unit && <em>{unit}</em>}
+      </div>
       <small>{note}</small>
     </article>
   );
+}
+
+function relativeMintTime(timestamp?: number) {
+  if (!timestamp) return "Recent";
+  const seconds = Math.max(0, Math.floor(Date.now() / 1000) - timestamp);
+  if (seconds < 3600) return `${Math.max(1, Math.floor(seconds / 60))}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  const days = Math.floor(seconds / 86400);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(months / 12)}y ago`;
 }
 
 function MintPanel({
@@ -397,143 +522,176 @@ function MintPanel({
   wallet: WalletState;
   onMint: () => void;
 }) {
+  const [contractCopied, setContractCopied] = useState(false);
   const full = data.price * BigInt(quantity),
     saved = full > cost ? full - cost : 0n;
+  const activePercent = data.minted
+    ? Math.min(100, (data.active / data.minted) * 100)
+    : 0;
+  const contractPreview = `${CONTRACTS.nft.slice(0, 10)}…${CONTRACTS.nft.slice(-8)}`;
+
+  const copyNftContract = async () => {
+    try {
+      await navigator.clipboard.writeText(CONTRACTS.nft);
+      setContractCopied(true);
+      window.setTimeout(() => setContractCopied(false), 1600);
+    } catch {
+      setContractCopied(false);
+    }
+  };
+
   return (
     <section className="mint-layout-react">
-      <article className="art-card">
-        <div className="art-frame">
-          {data.image ? (
-            <img src={data.image} alt={data.name} />
-          ) : (
-            <span className="art-placeholder">⛏</span>
-          )}
-        </div>
-        <div className="art-details">
-          <h2>{data.name}</h2>
-          <b>DegenStrategy</b>
-          <p>{data.description}</p>
-          <dl>
-            <div>
-              <dt>Token ID</dt>
-              <dd>#1</dd>
-            </div>
-            <div>
-              <dt>Type</dt>
-              <dd>ERC-1155</dd>
-            </div>
-            <div>
-              <dt>Rewards</dt>
-              <dd>OINK + DEGEN</dd>
-            </div>
-            <div>
-              <dt>Traits</dt>
-              <dd>{data.traits}</dd>
-            </div>
-          </dl>
-          <a
-            href={`https://scan.pulsechain.com/address/${CONTRACTS.nft}`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Verified NFT contract ↗
-          </a>
-        </div>
-      </article>
+      <div className="art-column">
+        {data.image ? (
+          <CashxArtwork imageUrl={data.image} />
+        ) : (
+          <div className="cashx-artwork-fallback">⛏</div>
+        )}
+      </div>
       <div className="purchase-column">
         <h2>Mint DegenStrategy NFT Miner</h2>
-        <p>
-          Hold NFT to earn auto-compounding OINK and DEGEN rewards. Burn any
-          time to cash out.
-        </p>
-        <div className="step-bar">
-          <b>
-            <i>1</i> Choose quantity
-          </b>
-          <span>→</span>
-          <b>
-            <i>2</i> Mint NFT
-          </b>
+        <p>Earn auto-compounding OINK + DEGEN.</p>
+        <div className="mint-progress">
+          <div>
+            <span>Active NFT miners</span>
+            <strong>
+              {data.active.toLocaleString()} /{" "}
+              {data.minted?.toLocaleString() ?? "—"}
+            </strong>
+          </div>
+          <div className="mint-progress-track">
+            <span style={{ width: `${activePercent}%` }} />
+          </div>
         </div>
-        <div className="purchase-panel">
-          <div className="purchase-stats">
-            <Metric
-              label="Price"
-              value={data.price ? `${formatPls(data.price, 4)} PLS` : "—"}
-              note="per NFT"
-            />
-            <Metric
-              label="Minted"
-              value={data.minted?.toLocaleString() ?? "—"}
-              note={`${data.active.toLocaleString()} active`}
-            />
-            <Metric
-              label="Burned"
-              value={data.burned?.toLocaleString() ?? "—"}
-              note="cashed out"
-            />
-          </div>
-          <div className="quantity-row">
-            <div>
-              <span>Quantity</span>
-              <small>3% off at 10+</small>
+        <section className="purchase-panel compact-purchase-panel">
+          <div className="step-bar">
+            <div className="step-item active">
+              <span>1</span>
+              <strong>Choose quantity</strong>
             </div>
-            <div className="stepper">
-              <button onClick={() => setQuantity(Math.max(1, quantity - 1))}>
-                −
-              </button>
-              <strong>{quantity}</strong>
-              <button onClick={() => setQuantity(Math.min(999, quantity + 1))}>
-                +
-              </button>
+            <span className="step-arrow">→</span>
+            <div className="step-item">
+              <span>2</span>
+              <strong>Mint NFT</strong>
             </div>
           </div>
-          <div className="total-card">
-            <span>{saved ? "Discounted total" : "Total cost"}</span>
-            <strong>{cost ? `${formatPls(cost)} PLS` : "—"}</strong>
-            {saved > 0n && <small>You save {formatPls(saved)} PLS</small>}
+          <div className="compact-mint-row">
+            <div className="compact-price">
+              <strong>
+                {data.price ? `${formatPls(data.price, 2)} PLS` : "—"}
+              </strong>
+              <small>
+                Total · {cost ? `${formatPls(cost)} PLS` : "—"}
+                {saved > 0n && ` · Save ${formatPls(saved)} PLS`}
+              </small>
+            </div>
+            <div className="compact-mint-actions">
+              <div className="stepper compact-stepper">
+                <button
+                  aria-label="Decrease quantity"
+                  disabled={quantity <= 1}
+                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                >
+                  −
+                </button>
+                <strong>{quantity}</strong>
+                <button
+                  aria-label="Increase quantity"
+                  disabled={quantity >= 999}
+                  onClick={() => setQuantity(Math.min(999, quantity + 1))}
+                >
+                  +
+                </button>
+              </div>
+              <button
+                className="mint-button compact-mint-button"
+                disabled={txPending || !cost}
+                onClick={onMint}
+              >
+                {txPending
+                  ? "Transaction pending"
+                  : wallet.isConnected
+                    ? `Mint ${quantity} NFT${quantity > 1 ? "s" : ""}`
+                    : "Connect Wallet"}
+              </button>
+            </div>
           </div>
-          <button
-            className="mint-button"
-            disabled={txPending || !cost}
-            onClick={onMint}
-          >
-            {txPending
-              ? "TRANSACTION PENDING"
-              : wallet.isConnected
-                ? `MINT ${quantity} NFT${quantity > 1 ? "S" : ""}`
-                : "CONNECT WALLET TO MINT"}
-          </button>
           {txStatus && <div className="transaction-status">{txStatus}</div>}
-        </div>
+        </section>
         <section className="recent-mints">
-          <h3>
-            Recent Mints <small>Updates from PulseChain</small>
-          </h3>
-          {data.events.slice(0, 7).map((event) => (
-            <div key={event.transactionHash}>
-              <a
-                href={`https://scan.pulsechain.com/address/${event.address}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {shortAddress(event.address)}
-              </a>
-              <span>
-                minted {event.quantity} miner{event.quantity === 1 ? "" : "s"}
-              </span>
-              <a
-                href={`https://scan.pulsechain.com/tx/${event.transactionHash}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                ↗
-              </a>
+          <div className="recent-mints-title">
+            <h3>Live Mints</h3>
+            <small>Updates automatically</small>
+          </div>
+          <div className="recent-mints-scroll">
+            <div className="recent-mints-table">
+              <div className="recent-mints-header" aria-hidden="true">
+                <span>Minter</span>
+                <span>Price</span>
+                <span>Qty</span>
+                <span>Time</span>
+              </div>
+              <div className="recent-mints-rows" aria-live="polite">
+                {data.events.slice(0, 7).map((event) => (
+                  <div
+                    className="recent-mint-row"
+                    key={event.transactionHash}
+                  >
+                    <div>
+                      <a
+                        href={`https://scan.pulsechain.com/address/${event.address}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {shortAddress(event.address)}
+                      </a>
+                      <small>DegenStrategy #1</small>
+                    </div>
+                    <strong>
+                      {data.price ? `${formatPls(data.price, 1)} PLS` : "—"}
+                    </strong>
+                    <span>{event.quantity}</span>
+                    <a
+                      className="recent-mint-time"
+                      href={`https://scan.pulsechain.com/tx/${event.transactionHash}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {relativeMintTime(event.timestamp)} ↗
+                    </a>
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
+          </div>
           {!data.events.length && (
             <p>No recent events available from the current RPC.</p>
           )}
+          <div className="nft-contract-line">
+            <span>NFT Contract:</span>
+            <a
+              href={`https://scan.pulsechain.com/address/${CONTRACTS.nft}`}
+              target="_blank"
+              rel="noreferrer"
+              title={CONTRACTS.nft}
+            >
+              {contractPreview}
+            </a>
+            <button
+              type="button"
+              className={contractCopied ? "copied" : ""}
+              aria-label={
+                contractCopied
+                  ? "NFT contract copied"
+                  : "Copy NFT contract address"
+              }
+              title="Copy NFT contract address"
+              onClick={() => void copyNftContract()}
+            >
+              {contractCopied ? "Copied" : "⧉"}
+            </button>
+          </div>
         </section>
       </div>
     </section>
@@ -549,6 +707,51 @@ function RewardsPanel({
   wallet: WalletState;
   reload: () => Promise<void>;
 }) {
+  const [showCompounded, setShowCompounded] = useState(
+    () => localStorage.getItem("degen-compounded") !== "false",
+  );
+  const [elapsedMs, setElapsedMs] = useState(0);
+  useEffect(() => {
+    const syncPreference = () =>
+      setShowCompounded(
+        localStorage.getItem("degen-compounded") !== "false",
+      );
+    window.addEventListener("degen-compounded-change", syncPreference);
+    return () =>
+      window.removeEventListener(
+        "degen-compounded-change",
+        syncPreference,
+      );
+  }, []);
+  useEffect(() => {
+    setElapsedMs(0);
+    if (!showCompounded) return;
+    const startedAt = Date.now();
+    const timer = window.setInterval(
+      () => setElapsedMs(Date.now() - startedAt),
+      100,
+    );
+    return () => window.clearInterval(timer);
+  }, [
+    showCompounded,
+    data.pendingOink,
+    data.pendingDegen,
+    data.perNftOinkSecond,
+    data.perNftDegenSecond,
+    data.walletBalance,
+  ]);
+  const elapsed = BigInt(Math.floor(elapsedMs));
+  const displayedOink =
+    data.pendingOink +
+    (data.perNftOinkSecond * data.walletBalance * elapsed) / 1_000n;
+  const displayedDegen =
+    data.pendingDegen +
+    (data.perNftDegenSecond * data.walletBalance * elapsed) / 1_000n;
+  const apr = useRewardsApr(
+    data.perNftOinkSecond,
+    data.perNftDegenSecond,
+  );
+
   if (!wallet.isConnected)
     return (
       <section className="feature-panel empty-state">
@@ -560,36 +763,91 @@ function RewardsPanel({
       </section>
     );
   return (
-    <section className="feature-panel">
-      <span className="eyebrow">Connected wallet</span>
-      <h2>Mining Rewards</h2>
-      <div className="reward-grid">
-        <Metric
-          label="NFT Miners Held"
-          value={data.walletBalance.toString()}
-          note="Token ID #1"
-        />
-        <Metric
-          label="OINK Pending"
-          value={formatToken(data.pendingOink)}
-          note="Current on-chain estimate"
-        />
-        <Metric
-          label="DEGEN Pending"
-          value={formatToken(data.pendingDegen)}
-          note="Current on-chain estimate"
+    <section className="rewards-dashboard">
+      <aside className="rewards-nft-profile">
+        {data.image ? (
+          <img src={data.image} alt={data.name} />
+        ) : (
+          <div className="rewards-nft-placeholder">⛏</div>
+        )}
+        <div className="rewards-nft-details">
+          <h3>{data.name}</h3>
+          <strong>DegenStrategy</strong>
+          <p>{data.description}</p>
+          <dl>
+            <div>
+              <dt>Token ID</dt>
+              <dd>#{NFT_TOKEN_ID.toString()}</dd>
+            </div>
+            <div>
+              <dt>Type</dt>
+              <dd>ERC-1155</dd>
+            </div>
+            <div>
+              <dt>Owned</dt>
+              <dd>{data.walletBalance.toString()}x</dd>
+            </div>
+            <div>
+              <dt>Traits</dt>
+              <dd>{data.traits.toLocaleString()}</dd>
+            </div>
+          </dl>
+          <a
+            href={`https://scan.pulsechain.com/address/${CONTRACTS.nft}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            ↗ View Contract
+          </a>
+        </div>
+      </aside>
+      <div className="rewards-console">
+        <header className="rewards-console-header">
+          <h2>Mining Rewards</h2>
+          <div>
+            <strong>{data.walletBalance.toString()}</strong>
+            <span>
+              NFT Miner{data.walletBalance === 1n ? "" : "s"} Held
+            </span>
+          </div>
+        </header>
+        <div className="rewards-token-grid">
+          <article>
+            <span>OINK Pending</span>
+            <strong>{formatToken(displayedOink)}</strong>
+          </article>
+          <article>
+            <span>DEGEN Pending</span>
+            <strong>{formatToken(displayedDegen)}</strong>
+          </article>
+        </div>
+        <div className="rewards-apr">
+          <span>Current APR:</span>
+          <strong>{apr}</strong>
+          <span
+            className="rewards-apr-info"
+            title="Estimated from current reward rates, live OINK and DEGEN prices, and the original $50 NFT valuation."
+          >
+            ⓘ
+          </span>
+          <small>
+            {showCompounded ? "live compounded" : "on-chain snapshot"}
+          </small>
+        </div>
+        <RewardsActions
+          dashboard
+          wallet={wallet}
+          balance={data.walletBalance}
+          pendingOink={displayedOink}
+          pendingDegen={displayedDegen}
+          onComplete={reload}
         />
       </div>
-      <RewardsActions
-        wallet={wallet}
-        balance={data.walletBalance}
-        pendingOink={data.pendingOink}
-        pendingDegen={data.pendingDegen}
-        onComplete={reload}
-      />
     </section>
   );
 }
+
+const MAX_CALCULATOR_MINERS = 5_000;
 
 function CalculatorPanel({
   price,
@@ -615,7 +873,7 @@ function CalculatorPanel({
           <input
             type="range"
             min="1"
-            max="100"
+            max={MAX_CALCULATOR_MINERS}
             value={quantity}
             onChange={(e) => setQuantity(Number(e.target.value))}
           />
@@ -624,7 +882,11 @@ function CalculatorPanel({
               −
             </button>
             <strong>{quantity}</strong>
-            <button onClick={() => setQuantity(Math.min(100, quantity + 1))}>
+            <button
+              onClick={() =>
+                setQuantity(Math.min(MAX_CALCULATOR_MINERS, quantity + 1))
+              }
+            >
               +
             </button>
           </div>
@@ -661,74 +923,129 @@ function CalculatorPanel({
   );
 }
 
-function HoldersPanel({ holders }: { holders: Holder[] }) {
+function holderGradient(address: string) {
+  const seed = Number.parseInt(address.slice(2, 8), 16) || 0;
+  const hue = seed % 360;
+  return `linear-gradient(135deg, hsl(${hue} 72% 58%), hsl(${(hue + 62) % 360} 68% 43%))`;
+}
+
+function HoldersPanel({
+  holders,
+  image,
+}: {
+  holders: Holder[];
+  image: string;
+}) {
   const total = holders.reduce((sum, item) => sum + item.value, 0);
   return (
-    <section className="feature-panel">
-      <span className="eyebrow">On-chain ownership</span>
-      <h2>NFT Miner Holders</h2>
-      <div className="reward-grid">
-        <Metric
-          label="Indexed holders"
-          value={holders.length.toLocaleString()}
-          note="PulseChain explorer"
-        />
-        <Metric
-          label="Miners represented"
-          value={total.toLocaleString()}
-          note="Across indexed wallets"
-        />
-        <Metric
-          label="Largest position"
-          value={(holders[0]?.value || 0).toLocaleString()}
-          note="NFT miners"
-        />
+    <section className="cashx-holders" aria-label="NFT miner holders">
+      <div className="cashx-holder-header">
+        <span>Wallet</span>
+        <span>Owned</span>
+        <span>% Owned</span>
+        <span>Items</span>
       </div>
-      <Table
-        headings={["Rank", "Holder", "NFT Miners", "Share", ""]}
-        rows={holders.map((holder, index) => [
-          String(index + 1),
-          shortAddress(holder.address),
-          holder.value.toLocaleString(),
-          total ? `${((holder.value / total) * 100).toFixed(2)}%` : "—",
-          <a
-            href={`https://scan.pulsechain.com/address/${holder.address}`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            View ↗
-          </a>,
-        ])}
-      />
+      <div
+        className="cashx-holder-scroll"
+        aria-label="Holder wallets with more available by scrolling"
+      >
+        {holders.map((holder) => (
+            <div className="cashx-holder-row" key={holder.address}>
+              <div className="cashx-holder-wallet">
+                <span
+                  className="cashx-holder-avatar"
+                  style={{ background: holderGradient(holder.address) }}
+                />
+                <a
+                  href={`https://scan.pulsechain.com/address/${holder.address}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {shortAddress(holder.address)}
+                </a>
+              </div>
+              <strong className="cashx-holder-owned">
+                {holder.value.toLocaleString()}
+              </strong>
+              <span className="cashx-holder-share">
+                {total ? `${((holder.value / total) * 100).toFixed(1)}%` : "—"}
+              </span>
+              <div className="cashx-holder-items">
+                {image ? (
+                  <img
+                    src={image}
+                    alt="DegenStrategy NFT Miner"
+                    title="DegenStrategy NFT Miner"
+                    loading="lazy"
+                  />
+                ) : (
+                  <span className="cashx-holder-item-fallback" />
+                )}
+                <small>×{holder.value.toLocaleString()}</small>
+              </div>
+            </div>
+          ))}
+        {!holders.length && (
+          <div className="cashx-holder-empty">
+            Holder balances are temporarily unavailable.
+          </div>
+        )}
+      </div>
+      <div className="cashx-holder-footer">
+        {`${holders.length.toLocaleString()} holders · ${total.toLocaleString()} active NFTs`}
+      </div>
     </section>
   );
 }
 
 function ActivityPanel({ events }: { events: MintEvent[] }) {
+  const recentEvents = events.slice(0, 25);
   return (
-    <section className="feature-panel">
-      <span className="eyebrow">On-chain history</span>
-      <h2>Mint Activity</h2>
-      <Table
-        headings={["Minter", "Quantity", "Block", "Transaction"]}
-        rows={events.map((event) => [
-          shortAddress(event.address),
-          event.quantity.toLocaleString(),
-          `#${event.blockNumber.toLocaleString()}`,
-          <a
-            href={`https://scan.pulsechain.com/tx/${event.transactionHash}`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            View ↗
-          </a>,
-        ])}
-      />
-      {!events.length && (
-        <p className="migration-note">
-          Activity is temporarily unavailable from the current RPC.
-        </p>
-      )}
+    <section className="cashx-activity" aria-label="Recent NFT mints">
+      <div className="cashx-activity-heading">
+        <h2>Recent Mints</h2>
+        <span>{recentEvents.length.toLocaleString()} events</span>
+      </div>
+      <div
+        className="cashx-activity-scroll"
+        aria-label="Latest mint events with more available by scrolling"
+      >
+        {recentEvents.map((event) => (
+          <article className="cashx-activity-row" key={event.transactionHash}>
+            <div className="cashx-activity-details">
+              <div className="cashx-activity-meta">
+                <a
+                  href={`https://scan.pulsechain.com/address/${event.address}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {shortAddress(event.address)}
+                </a>
+                <span>
+                  minted {event.quantity.toLocaleString()} NFT
+                  {event.quantity === 1 ? "" : "s"}
+                </span>
+              </div>
+              <div className="cashx-activity-name">DegenStrategy NFT #1</div>
+            </div>
+            <div className="cashx-activity-action">
+              <span>{relativeMintTime(event.timestamp)}</span>
+              <a
+                href={`https://scan.pulsechain.com/tx/${event.transactionHash}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                View TX ↗
+              </a>
+            </div>
+          </article>
+        ))}
+        {!recentEvents.length && (
+          <div className="cashx-activity-empty">
+            Activity is temporarily unavailable from the current RPC.
+          </div>
+        )}
+      </div>
     </section>
   );
 }

@@ -28,6 +28,15 @@ type Settings = {
   minDegen: string;
   fee: string;
 };
+type SettingsSummary = {
+  loading: boolean;
+  error: string;
+  oinkPool: string;
+  degenPool: string;
+  minOink: string;
+  minDegen: string;
+  fee: string;
+};
 type Purchase = {
   id: number;
   amount: bigint;
@@ -39,12 +48,66 @@ const display = (value: bigint) =>
   Number(formatEther(value)).toLocaleString(undefined, {
     maximumFractionDigits: 6,
   });
+const compactDisplay = (value: bigint | number) => {
+  const amount =
+    typeof value === "bigint" ? Number(formatEther(value)) : Number(value);
+  if (!Number.isFinite(amount)) return "0";
+  if (amount >= 1e9) return `${(amount / 1e9).toFixed(3)}B`;
+  if (amount >= 1e6) return `${(amount / 1e6).toFixed(3)}M`;
+  if (amount >= 1e3) return `${(amount / 1e3).toFixed(2)}K`;
+  return amount.toFixed(4);
+};
+const harvestInput = (value: bigint) => {
+  const amount = Number(formatEther(value));
+  if (!Number.isFinite(amount) || amount <= 0) return "0";
+  return amount >= 1_000
+    ? String(Math.floor(amount))
+    : String(Number(amount.toFixed(6)));
+};
+const canonicalPool = (
+  token: RewardToken,
+  address: unknown,
+  fallback: string,
+) =>
+  SETTINGS_POOLS[token].find(
+    (item) =>
+      item.address.toLowerCase() === String(address || "").toLowerCase(),
+  )?.address || fallback;
 const initialSettings: Settings = {
   oinkPool: SETTINGS_POOLS.OINK.at(-1)!.address,
   degenPool: SETTINGS_POOLS.DEGEN.at(-1)!.address,
   minOink: "0",
   minDegen: "0",
   fee: "0",
+};
+const initialSettingsSummary: SettingsSummary = {
+  loading: true,
+  error: "",
+  oinkPool: "Loading…",
+  degenPool: "Loading…",
+  minOink: "Loading…",
+  minDegen: "Loading…",
+  fee: "Loading…",
+};
+const poolSummary = (token: RewardToken, address: unknown) => {
+  const rawAddress = String(address || "");
+  if (!rawAddress || rawAddress === ZeroAddress) {
+    return token === "OINK"
+      ? "OINK — 5 Year (contract default)"
+      : "DEGEN — 10 Year (contract default)";
+  }
+  const pool = SETTINGS_POOLS[token].find(
+    (item) => item.address.toLowerCase() === rawAddress.toLowerCase(),
+  );
+  return pool
+    ? `${token} — ${pool.label}`
+    : `${token} — ${shortAddress(rawAddress)}`;
+};
+const settingAmount = (value: bigint) => {
+  const amount = Number(formatEther(value));
+  return amount > 0
+    ? amount.toLocaleString(undefined, { maximumFractionDigits: 2 })
+    : "Contract default";
 };
 
 export function RewardsActions({
@@ -53,16 +116,75 @@ export function RewardsActions({
   pendingOink,
   pendingDegen,
   onComplete,
+  dashboard = false,
 }: {
   wallet: WalletState;
   balance: bigint;
   pendingOink: bigint;
   pendingDegen: bigint;
   onComplete: () => Promise<void>;
+  dashboard?: boolean;
 }) {
   const [action, setAction] = useState<Action>(null);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshedAt, setRefreshedAt] = useState(() => new Date());
+  const [settingsRevision, setSettingsRevision] = useState(0);
+  const [settingsSummary, setSettingsSummary] =
+    useState<SettingsSummary>(initialSettingsSummary);
+  useEffect(() => {
+    if (!dashboard || !wallet.address) return;
+    let cancelled = false;
+    setSettingsSummary((current) => ({ ...current, loading: true }));
+    void (async () => {
+      try {
+        const { nft } = await getPublicContracts();
+        const raw = await nft.userSettings(wallet.address);
+        if (cancelled) return;
+        setSettingsSummary({
+          loading: false,
+          error: "",
+          oinkPool: poolSummary("OINK", raw.defaultHarvest1),
+          degenPool: poolSummary("DEGEN", raw.defaultHarvest2),
+          minOink: settingAmount(raw.minimumHarvest1),
+          minDegen: settingAmount(raw.minimumHarvest2),
+          fee:
+            Number(raw.fee) > 0
+              ? `${(Number(raw.fee) / 100).toFixed(2)}%`
+              : "Contract default (1%)",
+        });
+      } catch (error) {
+        if (cancelled) return;
+        setSettingsSummary({
+          ...initialSettingsSummary,
+          loading: false,
+          error: readableError(error),
+          oinkPool: "Unavailable",
+          degenPool: "Unavailable",
+          minOink: "Unavailable",
+          minDegen: "Unavailable",
+          fee: "Unavailable",
+        });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [dashboard, wallet.address, settingsRevision]);
+  const complete = async () => {
+    await onComplete();
+    setSettingsRevision((current) => current + 1);
+    setRefreshedAt(new Date());
+  };
+  const refresh = async () => {
+    try {
+      setRefreshing(true);
+      await complete();
+    } finally {
+      setRefreshing(false);
+    }
+  };
   const close = () => {
     if (!busy) {
       setAction(null);
@@ -71,17 +193,96 @@ export function RewardsActions({
   };
   return (
     <>
-      <div className="reward-actions">
-        <button onClick={() => setAction("harvest")}>Harvest Rewards</button>
-        <button onClick={() => setAction("settings")}>Miner Settings</button>
-        <button
-          className="danger"
-          disabled={balance === 0n}
-          onClick={() => setAction("burn")}
-        >
-          Burn / Cash Out
-        </button>
-      </div>
+      {dashboard ? (
+        <>
+          <div className="rewards-dashboard-actions">
+            <button
+              disabled={balance === 0n}
+              onClick={() => setAction("harvest")}
+            >
+              Manual Harvest
+            </button>
+            <button
+              className="burn"
+              disabled={balance === 0n}
+              onClick={() => setAction("burn")}
+            >
+              Burn NFT
+            </button>
+          </div>
+          <div className="rewards-dashboard-footer">
+            <span>
+              Rewards auto-distribute every ~50 min. Manual harvest claims your
+              pending balance now.
+            </span>
+            <div>
+              <time dateTime={refreshedAt.toISOString()}>
+                {refreshedAt.toLocaleTimeString()}
+              </time>
+              <button
+                disabled={refreshing}
+                onClick={() => void refresh()}
+              >
+                {refreshing ? "Refreshing…" : "↻ Refresh"}
+              </button>
+            </div>
+          </div>
+          <section className="rewards-settings-summary">
+            <header>
+              <h3>Miner Settings</h3>
+              <span>
+                Configure where auto-harvested rewards are staked
+              </span>
+            </header>
+            <dl>
+              <div>
+                <dt>OINK Harvest Pool</dt>
+                <dd>{settingsSummary.oinkPool}</dd>
+              </div>
+              <div>
+                <dt>DEGEN Harvest Pool</dt>
+                <dd>{settingsSummary.degenPool}</dd>
+              </div>
+              <div>
+                <dt>Min Harvest OINK</dt>
+                <dd>{settingsSummary.minOink}</dd>
+              </div>
+              <div>
+                <dt>Min Harvest DEGEN</dt>
+                <dd>{settingsSummary.minDegen}</dd>
+              </div>
+              <div>
+                <dt>Harvest Fee</dt>
+                <dd>{settingsSummary.fee}</dd>
+              </div>
+            </dl>
+            <button
+              className="rewards-edit-settings"
+              disabled={settingsSummary.loading || Boolean(settingsSummary.error)}
+              onClick={() => setAction("settings")}
+            >
+              Edit Settings
+            </button>
+            {settingsSummary.error && (
+              <p className="settings-summary-error">
+                Settings temporarily unavailable. Refresh to try again.
+              </p>
+            )}
+          </section>
+        </>
+      ) : (
+        <div className="reward-actions">
+          <button onClick={() => setAction("harvest")}>Manual Harvest</button>
+          <button onClick={() => setAction("settings")}>Edit Settings</button>
+          <button
+            className="danger"
+            disabled={balance === 0n}
+            onClick={() => setAction("burn")}
+          >
+            Burn NFT
+          </button>
+        </div>
+      )}
       {action === "harvest" && (
         <HarvestDialog
           wallet={wallet}
@@ -92,7 +293,7 @@ export function RewardsActions({
           status={status}
           setStatus={setStatus}
           close={close}
-          onComplete={onComplete}
+          onComplete={complete}
         />
       )}
       {action === "settings" && (
@@ -103,7 +304,7 @@ export function RewardsActions({
           status={status}
           setStatus={setStatus}
           close={close}
-          onComplete={onComplete}
+          onComplete={complete}
         />
       )}
       {action === "burn" && (
@@ -115,7 +316,7 @@ export function RewardsActions({
           status={status}
           setStatus={setStatus}
           close={close}
-          onComplete={onComplete}
+          onComplete={complete}
         />
       )}
     </>
@@ -136,10 +337,14 @@ function Modal({
   title,
   children,
   close,
+  className = "",
+  eyebrow = "NFT Miner",
 }: {
   title: string;
   children: ReactNode;
   close: () => void;
+  className?: string;
+  eyebrow?: string | null;
 }) {
   return (
     <div
@@ -150,14 +355,14 @@ function Modal({
       }}
     >
       <section
-        className="action-modal"
+        className={`action-modal ${className}`.trim()}
         role="dialog"
         aria-modal="true"
         aria-label={title}
       >
         <header>
           <div>
-            <span className="eyebrow">NFT Miner</span>
+            {eyebrow && <span className="eyebrow">{eyebrow}</span>}
             <h2>{title}</h2>
           </div>
           <button aria-label="Close" onClick={close}>
@@ -183,17 +388,24 @@ function HarvestDialog({
 }: Shared & { pendingOink: bigint; pendingDegen: bigint }) {
   const [token, setToken] = useState<RewardToken>("OINK");
   const max = token === "OINK" ? pendingOink : pendingDegen;
-  const [amount, setAmount] = useState(display(max));
+  const [amount, setAmount] = useState(() => harvestInput(pendingOink));
   const [destination, setDestination] = useState(
     HARVEST_DESTINATIONS.OINK[0].address!,
   );
-  useEffect(() => {
-    setAmount(display(max));
-    setDestination(HARVEST_DESTINATIONS[token][0].address!);
-  }, [token, max]);
-  const option = HARVEST_DESTINATIONS[token].find(
-    (item) => (item.address || "WALLET") === destination,
-  )!;
+  const choices = HARVEST_DESTINATIONS[token];
+  const option =
+    choices.find(
+      (item) => (item.address || "WALLET") === destination,
+    ) || choices[0];
+  const amountNumber = Number(amount.replace(/[, ]/g, "")) || 0;
+  const chooseToken = (nextToken: RewardToken) => {
+    const nextMax = nextToken === "OINK" ? pendingOink : pendingDegen;
+    setToken(nextToken);
+    setAmount(harvestInput(nextMax));
+    setDestination(
+      HARVEST_DESTINATIONS[nextToken][0].address || "WALLET",
+    );
+  };
   const submit = async () => {
     try {
       setBusy(true);
@@ -220,31 +432,48 @@ function HarvestDialog({
     }
   };
   return (
-    <Modal title="Harvest Rewards" close={close}>
+    <Modal
+      title="Manual Harvest"
+      close={close}
+      className="harvest-modal"
+      eyebrow={null}
+    >
+      <div className="harvest-balances">
+        <article>
+          <span>OINK Earned</span>
+          <strong className="oink">{compactDisplay(pendingOink)}</strong>
+        </article>
+        <article>
+          <span>DEGEN Earned</span>
+          <strong className="degen">{compactDisplay(pendingDegen)}</strong>
+        </article>
+      </div>
+      <div className="modal-section-label">Select Token to Harvest</div>
       <div className="token-switch">
         <button
           className={token === "OINK" ? "active" : ""}
-          onClick={() => setToken("OINK")}
+          onClick={() => chooseToken("OINK")}
         >
-          OINK · {display(pendingOink)}
+          OINK
         </button>
         <button
           className={token === "DEGEN" ? "active" : ""}
-          onClick={() => setToken("DEGEN")}
+          onClick={() => chooseToken("DEGEN")}
         >
-          DEGEN · {display(pendingDegen)}
+          DEGEN
         </button>
       </div>
       <label className="field-label">
-        Amount (maximum {display(max)} {token})
+        Amount to Harvest (Max: {display(max)} {token})
         <input
           value={amount}
           inputMode="decimal"
           onChange={(event) => setAmount(event.target.value)}
         />
       </label>
+      <div className="modal-section-label">Harvest Into…</div>
       <div className="destination-list">
-        {HARVEST_DESTINATIONS[token].map((item) => (
+        {choices.map((item) => (
           <label
             className={
               (item.address || "WALLET") === destination ? "selected" : ""
@@ -260,25 +489,24 @@ function HarvestDialog({
               <b>{item.label}</b>
               <small>
                 {item.payoutPct === 100
-                  ? "Receive 100%"
-                  : `Receive ${item.payoutPct}% · ${100 - item.payoutPct}% penalty`}
+                  ? `Receive 100% (${compactDisplay(amountNumber)})`
+                  : `-${100 - item.payoutPct}% Penalty (${compactDisplay(
+                      (amountNumber * item.payoutPct) / 100,
+                    )})`}
               </small>
             </span>
           </label>
         ))}
       </div>
-      {option.payoutPct < 100 && (
-        <p className="action-warning">
-          This destination has a substantial early-withdrawal penalty. A
-          full-payout pool is selected by default.
-        </p>
-      )}
+      <span className="sr-only">
+        Selected payout: {option.payoutPct} percent
+      </span>
       <ActionFooter
         busy={busy}
         status={status}
         close={close}
         submit={() => void submit()}
-        label={`Harvest ${token}`}
+        label="Harvest"
       />
     </Modal>
   );
@@ -294,6 +522,10 @@ function SettingsDialog({
   onComplete,
 }: Shared) {
   const [settings, setSettings] = useState<Settings>(initialSettings);
+  const [defaults, setDefaults] = useState({ oink: "0", degen: "0" });
+  const [showCompounded, setShowCompounded] = useState(
+    () => localStorage.getItem("degen-compounded") !== "false",
+  );
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let cancelled = false;
@@ -306,15 +538,26 @@ function SettingsDialog({
           nft.defaultMinHarvestDegen(),
         ]);
         if (cancelled) return;
+        const defaultOink = formatEther(defOink);
+        const defaultDegen = formatEther(defDegen);
+        setDefaults({ oink: defaultOink, degen: defaultDegen });
         setSettings({
           oinkPool:
             raw.defaultHarvest1 === ZeroAddress
               ? initialSettings.oinkPool
-              : String(raw.defaultHarvest1),
+              : canonicalPool(
+                  "OINK",
+                  raw.defaultHarvest1,
+                  initialSettings.oinkPool,
+                ),
           degenPool:
             raw.defaultHarvest2 === ZeroAddress
               ? initialSettings.degenPool
-              : String(raw.defaultHarvest2),
+              : canonicalPool(
+                  "DEGEN",
+                  raw.defaultHarvest2,
+                  initialSettings.degenPool,
+                ),
           minOink: formatEther(
             raw.minimumHarvest1 > 0n ? raw.minimumHarvest1 : defOink,
           ),
@@ -344,6 +587,11 @@ function SettingsDialog({
         throw new Error(
           "The protocol minimum fee is 1%. Use 0 for the contract default.",
         );
+      localStorage.setItem(
+        "degen-compounded",
+        showCompounded ? "true" : "false",
+      );
+      window.dispatchEvent(new Event("degen-compounded-change"));
       const signer = await wallet.getSigner();
       const contract = new Contract(CONTRACTS.nft, NFT_ABI, signer);
       const tx = await contract.setUserSettings(
@@ -366,13 +614,35 @@ function SettingsDialog({
   const field = (key: keyof Settings, value: string) =>
     setSettings((current) => ({ ...current, [key]: value }));
   return (
-    <Modal title="Miner Settings" close={close}>
+    <Modal
+      title="Settings"
+      close={close}
+      className="settings-modal"
+      eyebrow={null}
+    >
       {loading ? (
         <p>Loading your on-chain settings…</p>
       ) : (
         <div className="settings-grid">
+          <label className="settings-checkbox-row">
+            <span>
+              <input
+                type="checkbox"
+                checked={showCompounded}
+                onChange={(event) =>
+                  setShowCompounded(event.target.checked)
+                }
+              />
+              <b>Show Mining Rewards (compounded)</b>
+            </span>
+            <small>
+              When on, reward counters show earnings accumulating between
+              auto-harvest cycles. When off, they show only the confirmed
+              on-chain snapshot.
+            </small>
+          </label>
           <label>
-            OINK auto-harvest pool
+            OINK Harvest
             <select
               value={settings.oinkPool}
               onChange={(e) => field("oinkPool", e.target.value)}
@@ -383,9 +653,13 @@ function SettingsDialog({
                 </option>
               ))}
             </select>
+            <small>
+              Pool your OINK rewards are auto-staked into. Longer locks
+              provide higher APY.
+            </small>
           </label>
           <label>
-            DEGEN auto-harvest pool
+            DEGEN Harvest
             <select
               value={settings.degenPool}
               onChange={(e) => field("degenPool", e.target.value)}
@@ -396,29 +670,44 @@ function SettingsDialog({
                 </option>
               ))}
             </select>
+            <small>
+              Pool your DEGEN rewards are auto-staked into.
+            </small>
           </label>
           <label>
-            Minimum OINK harvest
+            Minimum Harvest OINK
             <input
+              inputMode="decimal"
               value={settings.minOink}
               onChange={(e) => field("minOink", e.target.value)}
             />
+            <small>
+              Protocol default: {defaults.oink} · Minimum pending OINK before
+              auto-harvest.
+            </small>
           </label>
           <label>
-            Minimum DEGEN harvest
+            Minimum Harvest DEGEN
             <input
+              inputMode="decimal"
               value={settings.minDegen}
               onChange={(e) => field("minDegen", e.target.value)}
             />
+            <small>
+              Protocol default: {defaults.degen} · Minimum pending DEGEN before
+              auto-harvest.
+            </small>
           </label>
           <label>
             Harvest fee (%)
             <input
+              inputMode="decimal"
               value={settings.fee}
               onChange={(e) => field("fee", e.target.value)}
             />
             <small>
-              0 uses the contract default; custom fee cannot be below 1%.
+              Protocol minimum is 1%. Enter 0 to use the default; a higher fee
+              donates the difference to the treasury.
             </small>
           </label>
         </div>
@@ -428,7 +717,7 @@ function SettingsDialog({
         status={status}
         close={close}
         submit={() => void submit()}
-        label="Save On-Chain Settings"
+        label="Update Settings"
       />
     </Modal>
   );

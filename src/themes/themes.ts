@@ -7,7 +7,7 @@ export const THEMES = {
     panel: "#111111",
     border: "#355a66",
     accent: "#e06c75",
-    effect: "synapse",
+    effect: "none",
   },
   light: {
     bg: "#f0ebe3",
@@ -79,7 +79,7 @@ export const THEMES = {
     panel: "#140f0a",
     border: "#7a5533",
     accent: "#d4764e",
-    effect: "embers",
+    effect: "none",
   },
   terminal: {
     bg: "#000000",
@@ -87,7 +87,7 @@ export const THEMES = {
     panel: "#0a0a0a",
     border: "#003b00",
     accent: "#00ff41",
-    effect: "flow",
+    effect: "perlin-flow",
   },
   organs: {
     bg: "#0a0406",
@@ -103,7 +103,7 @@ export const THEMES = {
     panel: "#faf7ff",
     border: "#cec3de",
     accent: "#9b6dcc",
-    effect: "petals",
+    effect: "none",
   },
   GPT: {
     bg: "#212121",
@@ -111,7 +111,7 @@ export const THEMES = {
     panel: "#171717",
     border: "#424242",
     accent: "#949494",
-    effect: "flow",
+    effect: "none",
   },
   claude: {
     bg: "#262624",
@@ -119,7 +119,7 @@ export const THEMES = {
     panel: "#30302e",
     border: "#4a4a47",
     accent: "#c6613f",
-    effect: "embers",
+    effect: "none",
   },
   cute: {
     bg: "#fff0f5",
@@ -139,6 +139,5 @@ export function applyTheme(name: ThemeName) {
   root.style.setProperty("--panel", theme.panel);
   root.style.setProperty("--border", theme.border);
   root.style.setProperty("--accent", theme.accent);
-  document.body.dataset.effect = theme.effect;
   localStorage.setItem("degen-react-theme", name);
 }

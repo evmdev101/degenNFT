@@ -1,3 +1,4 @@
+import { NavLink } from "react-router-dom";
 import { shortAddress } from "../lib/chain";
 import type { WalletState } from "../hooks/useWallet";
 import type { ThemeName } from "../themes/themes";
@@ -5,30 +6,24 @@ import { ThemePanel } from "./ThemePanel";
 
 export type MainTab =
   | "nft"
-  | "miners"
   | "rewards"
   | "farms"
   | "sale"
   | "referral";
 
-const nav: Array<[MainTab, string]> = [
-  ["nft", "NFT"],
-  ["miners", "Miners"],
-  ["rewards", "My Miners"],
-  ["farms", "Farms"],
-  ["sale", "DEGEN Sale"],
-  ["referral", "Referral"],
+const nav: Array<[MainTab, string, string]> = [
+  ["nft", "NFT", "/nft"],
+  ["rewards", "Miners", "/my-miners"],
+  ["farms", "Farms", "/farms"],
+  ["sale", "DEGEN Sale", "/degen-sale"],
+  ["referral", "Referral", "/referral"],
 ];
 
 export function Header({
-  active,
-  onNavigate,
   wallet,
   theme,
   setTheme,
 }: {
-  active: MainTab;
-  onNavigate: (tab: MainTab) => void;
   wallet: WalletState;
   theme: ThemeName;
   setTheme: (theme: ThemeName) => void;
@@ -65,14 +60,14 @@ export function Header({
         <strong>DEGEN</strong>
       </div>
       <nav aria-label="Primary navigation">
-        {nav.map(([key, label]) => (
-          <button
-            className={active === key ? "active" : ""}
+        {nav.map(([key, label, path]) => (
+          <NavLink
+            className={({ isActive }) => (isActive ? "active" : undefined)}
             key={key}
-            onClick={() => onNavigate(key)}
+            to={path}
           >
             {label}
-          </button>
+          </NavLink>
         ))}
       </nav>
       <div className="header-actions">
