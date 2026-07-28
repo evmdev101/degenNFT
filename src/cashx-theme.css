@@ -8,6 +8,15 @@
   --bg-effect-color: var(--fg);
   --bg-effect-intensity: 1;
   --bg-effect-size: 1;
+  --farm-theme-bg: var(--bg);
+  --farm-theme-panel: var(--panel);
+  --farm-theme-card: var(--panel);
+  --farm-theme-metric: color-mix(in srgb, var(--fg) 8%, transparent);
+  --farm-theme-border: color-mix(in srgb, var(--border) 72%, transparent);
+  --farm-theme-text: var(--fg);
+  --farm-theme-muted: color-mix(in srgb, var(--fg) 62%, transparent);
+  --farm-theme-accent: var(--accent);
+  --farm-theme-shadow: color-mix(in srgb, var(--accent) 24%, transparent);
   font-family: "Fira Code", ui-monospace, "Cascadia Code", Consolas, monospace;
 }
 
@@ -83,7 +92,6 @@ h4,
 .action-modal > header h2,
 .ref-card-title,
 .dsale-logo,
-.dsale-title,
 .dsale-modal-title {
   font-family: "DM Sans", sans-serif;
   text-transform: none;
@@ -124,6 +132,43 @@ h4,
   border-color: #fff;
   box-shadow: 0 0 20px color-mix(in srgb, var(--fg) 25%, transparent);
   transform: translateY(-1px);
+}
+
+.site-header .nav-left {
+  --farm-theme-panel: var(--panel);
+  --farm-theme-text: var(--fg);
+  --farm-theme-accent: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.site-header .nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  color: var(--farm-theme-text, #64d2ff);
+  background: color-mix(in srgb, var(--farm-theme-text, #64d2ff) 12%, var(--farm-theme-panel, #091422));
+  border: 1px solid color-mix(in srgb, var(--farm-theme-accent, #4facfe) 34%, transparent);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--farm-theme-accent, #4facfe) 14%, transparent);
+  opacity: 1;
+  transition: opacity 0.2s, background 0.2s, transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.site-header .nav-icon svg path {
+  fill: currentColor;
+}
+
+.site-header .nav-icon:hover {
+  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--farm-theme-accent, #4facfe) 22%, var(--farm-theme-panel, #091422));
+  border-color: color-mix(in srgb, var(--farm-theme-accent, #4facfe) 58%, transparent);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--farm-theme-accent, #4facfe) 24%, transparent);
 }
 
 .brand {

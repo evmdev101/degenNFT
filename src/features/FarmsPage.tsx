@@ -914,6 +914,50 @@ type HarvestModalState = {
   reject: (e: Error) => void;
 } | null;
 
+const FARM_TVL_HIST_KEY = "cashx_farms_tvl_hist_v1";
+
+function recordTvlSnapshot(tvl: number) {
+  try {
+    const now = Date.now();
+    const stored = JSON.parse(localStorage.getItem(FARM_TVL_HIST_KEY) || "[]");
+    let history: Array<{ t: number; v: number }> = Array.isArray(stored) ? stored : [];
+    history = history.filter(
+      (entry) =>
+        entry &&
+        Number.isFinite(entry.t) &&
+        Number.isFinite(entry.v) &&
+        now - entry.t < 8 * 86400000,
+    );
+    const last = history[history.length - 1];
+    if (!last || now - last.t > 30 * 60000) {
+      history.push({ t: now, v: tvl });
+      localStorage.setItem(FARM_TVL_HIST_KEY, JSON.stringify(history));
+    }
+    return history;
+  } catch {
+    return [];
+  }
+}
+
+function getTvlChange24h(tvl: number) {
+  const history = recordTvlSnapshot(tvl);
+  const now = Date.now();
+  let reference: { t: number; v: number } | null = null;
+  let bestDifference = Infinity;
+  history.forEach((entry) => {
+    const age = now - entry.t;
+    if (age < 20 * 3600000 || age > 30 * 3600000) return;
+    const difference = Math.abs(age - 86400000);
+    if (difference < bestDifference) {
+      bestDifference = difference;
+      reference = entry;
+    }
+  });
+  const selectedReference = reference as { t: number; v: number } | null;
+  if (!selectedReference || !(selectedReference.v > 0)) return null;
+  return ((tvl - selectedReference.v) / selectedReference.v) * 100;
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 export function FarmsPage({ wallet }: { wallet: WalletState }) {
   const [farms, setFarms] = useState<(FarmData | null)[]>([]);
@@ -927,6 +971,7 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
   const [breakdowns, setBreakdowns] = useState<Record<number, Breakdown | undefined>>({});
   const [bannerStatus, setBannerStatus] = useState<Status>({ msg: "", cls: "" });
   const [harvestModal, setHarvestModal] = useState<HarvestModalState>(null);
+  const [tvlChange24h, setTvlChange24h] = useState<number | null>(null);
   const [, setTick] = useState(0);
   const loadSeq = useRef(0);
   const statusTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
@@ -1706,6 +1751,26 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
     bannerTotal > 0 && dailySum > 0
       ? bannerTotal + dailySum * ((Date.now() - bannerTs) / 86400000)
       : bannerTotal;
+  const totalUserStakedUsd = loadedFarms.reduce(
+    (sum, d) => sum + (Number.isFinite(d.stakedUsd) ? Number(d.stakedUsd) : 0),
+    0,
+  );
+  const claimableFarms = loadedFarms.filter((d) => (d.pendingDegen || 0) > 1e-8);
+  const rewardPriceUsd =
+    loadedFarms.find((d) => (d.rewardPriceUsd || 0) > 0)?.rewardPriceUsd || null;
+  const knownPendingUsd = loadedFarms.reduce(
+    (sum, d) => sum + (Number.isFinite(d.pendingUsd) ? Number(d.pendingUsd) : 0),
+    0,
+  );
+  const totalClaimableUsd = rewardPriceUsd
+    ? liveBannerTotal * rewardPriceUsd
+    : bannerTotal <= 1e-8
+      ? 0
+      : knownPendingUsd > 0
+        ? knownPendingUsd
+        : null;
+  const formatFarmSummaryUsd = (value: number | null) =>
+    value === null ? "Loading" : `$${fmtFullReward(value)} USD`;
 
   const visible = stakedOnly ? loadedFarms.filter(isActiveDegenFarm) : loadedFarms;
   const sortedVisible = visible
@@ -1720,6 +1785,21 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
     const tvl = Number(d?.tvlUsd || 0);
     return Number.isFinite(tvl) && tvl > 0 ? sum + tvl : sum;
   }, 0);
+  const totalTvlText =
+    totalTvl > 0
+      ? `$${totalTvl.toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}`
+      : "Loading";
+
+  useEffect(() => {
+    if (totalTvl <= 0 || loadedFarms.length < DEGEN_FARMS.length) {
+      setTvlChange24h(null);
+      return;
+    }
+    setTvlChange24h(getTvlChange24h(totalTvl));
+  }, [loadedFarms.length, totalTvl]);
 
   const highlightCol = (title: string, metric: "apr" | "tvl" | "rewards") => {
     const top = loadedFarms
@@ -2238,8 +2318,24 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
           <>
             <div>
               <div className="farm-total-tvl">
-                Total Value Locked:{" "}
-                <b>{totalTvl > 0 ? "$" + Math.round(totalTvl).toLocaleString() : "—"}</b>
+                Total Value Locked:
+                <span className="farm-summary-value">{totalTvlText}</span>
+                <span
+                  className={`farm-tvl-change ${
+                    tvlChange24h === null
+                      ? ""
+                      : tvlChange24h > 0
+                        ? "pct-up"
+                        : tvlChange24h < 0
+                          ? "pct-dn"
+                          : "pct-neu"
+                  }`}
+                  hidden={tvlChange24h === null}
+                >
+                  {tvlChange24h === null
+                    ? ""
+                    : `${tvlChange24h >= 0 ? "+" : ""}${tvlChange24h.toFixed(2)}% (24h)`}
+                </span>
               </div>
               <div className="farm-highlights">
                 {highlightCol("Highest APR", "apr")}
@@ -2259,12 +2355,8 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
                   <div className="farms-brand-logo">
                     <img src={TOKEN_LOGOS["DEGEN"]} alt="DEGEN" />
                   </div>
-                  <div>
-                    <div className="farms-title">
-                      DEGEN Farms{" "}
-                      <span className="farms-count">{DEGEN_FARMS.length} farms</span>
-                    </div>
-                  </div>
+                  <span className="farms-title">DEGEN Farms</span>
+                  <span className="farms-count">{DEGEN_FARMS.length} farms</span>
                 </a>
                 <button
                   className={`farms-filter${stakedOnly ? " active" : ""}`}
@@ -2293,25 +2385,41 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
                   </button>
                 </div>
               </div>
-              {bannerTotal > 1e-8 && (
-                <div>
-                  <div className="farms-rewards-banner">
-                    <span>
-                      Total Rewards: <b>{fmtFullReward(liveBannerTotal)}</b> DEGEN
-                    </span>
-                    <button
-                      className="bfc-liquidity-btn"
-                      type="button"
-                      onClick={() => void claimAllRewards()}
+              <div className="farm-claimable-summary">
+                <div className="farm-claimable-main">
+                  <span>Total Staked:</span>
+                  <span className="farm-summary-value">
+                    {formatFarmSummaryUsd(totalUserStakedUsd)}
+                  </span>
+                </div>
+                <div className="farm-claimable-main">
+                  <span>Total Claimable Rewards:</span>
+                  <span className="farm-summary-value">
+                    {formatFarmSummaryUsd(totalClaimableUsd)}
+                  </span>
+                </div>
+                <div className="farm-claim-all-wrap">
+                  <span className="farm-positions-label">
+                    {claimableFarms.length} active position{claimableFarms.length === 1 ? "" : "s"}
+                  </span>
+                  <button
+                    className={`farm-claim-all-btn${bannerStatus.cls === "active" ? " claiming" : ""}`}
+                    type="button"
+                    onClick={() => void claimAllRewards()}
+                    disabled={bannerTotal <= 1e-8 || bannerStatus.cls === "active"}
+                  >
+                    Claim All
+                  </button>
+                  {bannerStatus.msg && (
+                    <span
+                      className={`bfc-status farm-claim-all-status${bannerStatus.cls ? " " + bannerStatus.cls : ""}`}
+                      aria-live="polite"
                     >
-                      Claim Rewards
-                    </button>
-                    <span className={`bfc-status${bannerStatus.cls ? " " + bannerStatus.cls : ""}`}>
                       {bannerStatus.msg}
                     </span>
-                  </div>
+                  )}
                 </div>
-              )}
+              </div>
               {sortedVisible.length === 0 ? (
                 <div className={view === "table" ? "browse-farms-table-wrap" : "browse-farms-grid"}>
                   <div className="rw-miners-loading">

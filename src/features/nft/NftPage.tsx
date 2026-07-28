@@ -383,6 +383,17 @@ export function NftPage({ wallet }: { wallet: WalletState }) {
     }
   };
 
+  if (data.loading) {
+    return (
+      <main className="nft-page nft-page-loading" aria-busy="true">
+        <div className="nft-loading-message" role="status" aria-live="polite">
+          <span className="nft-loading-spinner" aria-hidden="true" />
+          Loading NFT data…
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="nft-page">
       <section className="overview-section">
@@ -402,13 +413,13 @@ export function NftPage({ wallet }: { wallet: WalletState }) {
           />
           <Metric
             label="Total Minted"
-            value={data.minted?.toLocaleString() ?? "Indexing…"}
+            value={data.minted?.toLocaleString() ?? "—"}
             unit="NFTs"
             note="All-time miners created"
           />
           <Metric
             label="Total Burned"
-            value={data.burned?.toLocaleString() ?? "Indexing…"}
+            value={data.burned?.toLocaleString() ?? "—"}
             unit="NFTs"
             note="Cashed out permanently"
           />
@@ -525,9 +536,6 @@ function MintPanel({
   const [contractCopied, setContractCopied] = useState(false);
   const full = data.price * BigInt(quantity),
     saved = full > cost ? full - cost : 0n;
-  const activePercent = data.minted
-    ? Math.min(100, (data.active / data.minted) * 100)
-    : 0;
   const contractPreview = `${CONTRACTS.nft.slice(0, 10)}…${CONTRACTS.nft.slice(-8)}`;
 
   const copyNftContract = async () => {
@@ -552,18 +560,6 @@ function MintPanel({
       <div className="purchase-column">
         <h2>Mint DegenStrategy NFT Miner</h2>
         <p>Earn auto-compounding OINK + DEGEN.</p>
-        <div className="mint-progress">
-          <div>
-            <span>Active NFT miners</span>
-            <strong>
-              {data.active.toLocaleString()} /{" "}
-              {data.minted?.toLocaleString() ?? "—"}
-            </strong>
-          </div>
-          <div className="mint-progress-track">
-            <span style={{ width: `${activePercent}%` }} />
-          </div>
-        </div>
         <section className="purchase-panel compact-purchase-panel">
           <div className="step-bar">
             <div className="step-item active">

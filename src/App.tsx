@@ -10,16 +10,6 @@ const NftPage = lazy(() =>
     default: module.NftPage,
   })),
 );
-const ReferralPage = lazy(() =>
-  import("./features/ReferralPage").then((module) => ({
-    default: module.ReferralPage,
-  })),
-);
-const SalePage = lazy(() =>
-  import("./features/SalePage").then((module) => ({
-    default: module.SalePage,
-  })),
-);
 const MinersHubPage = lazy(() =>
   import("./features/MinersHubPage").then((module) => ({
     default: module.MinersHubPage,
@@ -60,10 +50,13 @@ export default function App() {
             element={<MinersHubPage wallet={wallet} />}
           />
           <Route path="/farms" element={<FarmsPage wallet={wallet} />} />
-          <Route path="/degen-sale" element={<SalePage wallet={wallet} />} />
+          <Route
+            path="/degen-sale"
+            element={<Navigate to="/my-miners?tab=sale" replace />}
+          />
           <Route
             path="/referral"
-            element={<ReferralPage wallet={wallet} />}
+            element={<Navigate to="/my-miners?tab=referral" replace />}
           />
           <Route path="*" element={<Navigate to="/nft" replace />} />
         </Routes>

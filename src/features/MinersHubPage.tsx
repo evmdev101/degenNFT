@@ -2,20 +2,27 @@ import { useSearchParams } from "react-router-dom";
 import type { WalletState } from "../hooks/useWallet";
 import { MinersPage } from "./MinersPage";
 import { MyMinersPage } from "./MyMinersPage";
+import { ReferralPage } from "./ReferralPage";
+import { SalePage } from "./SalePage";
 
-type MinerHubTab = "my-miners" | "deploy";
+type MinerHubTab = "my-miners" | "deploy" | "sale" | "referral";
 
 export function MinersHubPage({ wallet }: { wallet: WalletState }) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
   const activeTab: MinerHubTab =
-    searchParams.get("tab") === "deploy" ? "deploy" : "my-miners";
+    requestedTab === "deploy" ||
+    requestedTab === "sale" ||
+    requestedTab === "referral"
+      ? requestedTab
+      : "my-miners";
 
   const selectTab = (tab: MinerHubTab) => {
     const nextParams = new URLSearchParams(searchParams);
-    if (tab === "deploy") {
-      nextParams.set("tab", "deploy");
-    } else {
+    if (tab === "my-miners") {
       nextParams.delete("tab");
+    } else {
+      nextParams.set("tab", tab);
     }
     setSearchParams(nextParams);
   };
@@ -49,17 +56,57 @@ export function MinersHubPage({ wallet }: { wallet: WalletState }) {
         >
           Deploy Miners
         </button>
+        <button
+          type="button"
+          id="degen-miner-sale-tab"
+          className={activeTab === "sale" ? "active" : undefined}
+          role="tab"
+          aria-selected={activeTab === "sale"}
+          aria-controls="degen-miner-sale-panel"
+          onClick={() => selectTab("sale")}
+        >
+          Degen Miner Sale
+        </button>
+        <button
+          type="button"
+          id="miner-referral-tab"
+          className={activeTab === "referral" ? "active" : undefined}
+          role="tab"
+          aria-selected={activeTab === "referral"}
+          aria-controls="miner-referral-panel"
+          onClick={() => selectTab("referral")}
+        >
+          Referral
+        </button>
       </nav>
 
       <div
-        id={`${activeTab === "deploy" ? "deploy-miners" : "my-miners"}-panel`}
+        id={
+          activeTab === "deploy"
+            ? "deploy-miners-panel"
+            : activeTab === "sale"
+              ? "degen-miner-sale-panel"
+              : activeTab === "referral"
+                ? "miner-referral-panel"
+              : "my-miners-panel"
+        }
         role="tabpanel"
         aria-labelledby={
-          activeTab === "deploy" ? "deploy-miners-tab" : "my-miners-tab"
+          activeTab === "deploy"
+            ? "deploy-miners-tab"
+            : activeTab === "sale"
+              ? "degen-miner-sale-tab"
+              : activeTab === "referral"
+                ? "miner-referral-tab"
+              : "my-miners-tab"
         }
       >
         {activeTab === "deploy" ? (
           <MinersPage wallet={wallet} />
+        ) : activeTab === "sale" ? (
+          <SalePage wallet={wallet} />
+        ) : activeTab === "referral" ? (
+          <ReferralPage wallet={wallet} />
         ) : (
           <MyMinersPage wallet={wallet} />
         )}

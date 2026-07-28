@@ -90,84 +90,69 @@
     }
 
     /* ── DEGEN Sale Tab ── */
-    .dsale-wrap { max-width: 720px; margin: 0 auto; padding: 32px 24px; display: flex; flex-direction: column; gap: 22px; }
-    .dsale-card {
-      background: color-mix(in srgb, var(--panel) 80%, transparent);
-      border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-      border-radius: 16px; padding: 32px 32px;
-      display: flex; flex-direction: column; align-items: center; gap: 0; text-align: center;
+    .dsale-wrap { width:100%; max-width:1220px; margin:0 auto; padding:48px 30px 90px; }
+    .dsale-grid { display:grid; grid-template-columns:1.3fr 1fr; gap:32px; align-items:start; }
+
+    /* Left column: info */
+    .dsale-info { position:relative; min-width:0; padding:6px 4px; }
+    .dsale-logo { font-family:'Permanent Marker',cursive; font-size:1.1rem; color:var(--red); letter-spacing:0.04em; margin-bottom:12px; }
+    .dsale-title { max-width:640px; margin:0 0 18px; font-family:'Permanent Marker',cursive; font-weight:400; font-size:clamp(1.9rem,2.7vw,3rem); color:color-mix(in srgb,var(--fg) 78%,#fff); letter-spacing:0; line-height:1.15; }
+    .dsale-desc { max-width:560px; margin:0 0 28px; font-size:clamp(0.84rem,1vw,0.96rem); line-height:1.8; color:color-mix(in srgb,var(--fg) 66%,transparent); }
+    .dsale-avail { position:relative; padding:0; margin:0 0 26px; }
+    .dsale-avail-label { font-size:0.62rem; font-weight:800; letter-spacing:0.2em; text-transform:uppercase; opacity:0.55; margin-bottom:8px; }
+    .dsale-avail-val { font-family:'DM Sans',sans-serif; font-size:clamp(1.4rem,2.1vw,2.3rem); font-weight:900; letter-spacing:-0.04em; line-height:1.05; color:var(--red); overflow-wrap:anywhere; }
+    .dsale-anychain { display:flex; flex-direction:column; align-items:flex-start; gap:12px; margin-top:6px; }
+    .dsale-anychain-headline {
+      font-family:'Permanent Marker',cursive; font-size:clamp(1.15rem,1.6vw,1.5rem); font-weight:400;
+      letter-spacing:0; line-height:1.25; color:color-mix(in srgb,var(--fg) 78%,#fff);
     }
-    .dsale-logo { font-family: 'Barlow Condensed',sans-serif; font-size: 1.5rem; font-weight: 900; color: var(--red); letter-spacing: 4px; text-transform: uppercase; margin-bottom: 4px; text-shadow: 0 0 14px color-mix(in srgb, var(--red) 45%, transparent); }
-    .dsale-title { font-family: 'Barlow Condensed',sans-serif; font-size: 1.4rem; font-weight: 800; color: var(--fg); letter-spacing: 2px; margin-bottom: 14px; }
-    .dsale-desc { font-size: 0.8rem; opacity: 0.62; line-height: 1.65; max-width: 540px; margin-bottom: 20px; }
-    .dsale-avail {
-      margin-bottom: 18px;
+    .dsale-anychain-headline em { font-style:normal; }
+    .dsale-anychain-chips { display:flex; flex-wrap:wrap; gap:7px; }
+    .dsale-anychain-chip {
+      padding:4px 11px; border-radius:999px;
+      border:1px solid color-mix(in srgb,var(--fg) 16%,transparent);
+      font-family:'Space Mono',monospace; font-size:0.62rem; letter-spacing:0.08em;
+      color:color-mix(in srgb,var(--fg) 62%,transparent);
     }
-    .dsale-avail-label { font-size: 0.6rem; letter-spacing: 2px; text-transform: uppercase; opacity: 0.45; margin-bottom: 4px; }
-    .dsale-avail-val { font-size: 1.3rem; font-weight: 700; color: var(--red); }
-    .dsale-discounts { margin-bottom: 26px; color: color-mix(in srgb, var(--fg) 82%, var(--panel)); font-size: 0.9rem; line-height: 1.65; }
-    .dsale-discounts-title { margin-bottom: 2px; }
-    .dsale-discount-line { white-space: nowrap; }
-    .dsale-action-btn {
-      width: 100%; max-width: 520px; padding: 16px 24px; border-radius: 10px;
-      font-family: 'Barlow Condensed', sans-serif; font-size: 1rem; font-weight: 800;
-      letter-spacing: 2px; text-transform: uppercase; cursor: pointer; margin-bottom: 12px;
-      transition: background 0.15s, transform 0.12s;
+    .dsale-anychain-link {
+      display:inline-flex; padding:0; border:none; background:none; text-align:left; cursor:pointer;
+      font-family:'DM Sans',sans-serif; text-decoration:none;
     }
-    .dsale-action-btn:hover { transform: translateY(-1px); }
-    .dsale-action-btn.any-chain {
-      background: color-mix(in srgb, var(--red) 18%, transparent);
-      border: 1px solid color-mix(in srgb, var(--red) 45%, transparent);
-      color: var(--red);
+    .dsale-anychain-link strong {
+      display:inline-flex; align-items:center; gap:10px;
+      font-size:clamp(1.25rem,1.8vw,1.6rem); font-weight:900; color:var(--red);
+      border-bottom:2px solid color-mix(in srgb,var(--red) 40%,transparent);
+      padding-bottom:4px; transition:border-color 0.15s;
     }
-    .dsale-action-btn.any-chain:hover { background: color-mix(in srgb, var(--red) 28%, transparent); }
-    .dsale-action-btn.pls-buy {
-      background: color-mix(in srgb, var(--red) 13%, transparent);
-      border: 1px solid color-mix(in srgb, var(--red) 45%, transparent);
-      color: var(--fg);
+    .dsale-anychain-link:hover strong { border-bottom-color:var(--red); }
+    .dsale-anychain-arrow { display:inline-block; transition:transform 0.15s; }
+    .dsale-anychain-link:hover .dsale-anychain-arrow { transform:translateX(4px); }
+
+    /* Right column: sticky buy/claim panel */
+    .dsale-panel {
+      position:sticky; top:96px;
+      border:1px solid color-mix(in srgb,var(--red) 30%,var(--border)); border-radius:18px; overflow:hidden;
+      background:linear-gradient(160deg,color-mix(in srgb,var(--panel) 94%,transparent),color-mix(in srgb,var(--bg) 84%,transparent));
     }
-    .dsale-action-btn.pls-buy:hover { background: color-mix(in srgb, var(--red) 22%, transparent); }
-    .dsale-pending-card {
-      width: 100%; max-width: 520px; padding: 18px 20px;
-      background: color-mix(in srgb, var(--bg) 50%, transparent);
-      border: 1px solid var(--border); border-radius: 10px;
-      display: flex; flex-direction: column; gap: 8px; align-items: center; margin-top: 8px;
+    .dsale-panel-stat { padding:20px 24px; border-bottom:1px solid color-mix(in srgb,var(--fg) 10%,transparent); display:flex; flex-direction:column; gap:6px; }
+    .dsale-panel-stat-label { font-size:0.6rem; font-weight:800; letter-spacing:0.19em; text-transform:uppercase; opacity:0.52; }
+    .dsale-panel-stat-val { font-family:'DM Sans',sans-serif; font-size:1.35rem; font-weight:900; letter-spacing:-0.03em; color:var(--red); }
+    .dsale-panel-stat-sub { font-size:0.62rem; line-height:1.5; opacity:0.5; }
+    .dsale-panel-tabs { display:grid; grid-template-columns:1fr 1fr; }
+    .dsale-panel-tab {
+      padding:14px 10px; background:none; border:none; border-bottom:2px solid transparent;
+      color:color-mix(in srgb,var(--fg) 55%,transparent); font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:800;
+      letter-spacing:1.4px; text-transform:uppercase; cursor:pointer; transition:color 0.15s,border-color 0.15s;
+      display:flex; align-items:center; justify-content:center; gap:6px;
     }
-    .dsale-pending-label { font-size: 0.6rem; letter-spacing: 2px; text-transform: uppercase; opacity: 0.42; }
-    .dsale-pending-val { font-size: 1.2rem; font-weight: 700; color: var(--red); }
-    .dsale-pending-sub { font-size: 0.7rem; opacity: 0.45; }
-    .dsale-claim-action-btn {
-      width: 100%; padding: 13px; border-radius: 9px;
-      background: color-mix(in srgb, var(--red) 13%, transparent);
-      border: 1px solid color-mix(in srgb, var(--red) 40%, transparent);
-      color: var(--red); font-family: 'Barlow Condensed',sans-serif;
-      font-size: 1rem; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;
-      cursor: pointer; transition: background 0.15s;
-    }
-    .dsale-claim-action-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--red) 24%, transparent); }
-    .dsale-claim-action-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-    /* DEGEN Sale Modals */
-    .dsale-modal-overlay {
-      position: fixed; inset: 0; z-index: 1000;
-      background: rgba(0,0,0,0.82); backdrop-filter: blur(5px);
-      display: flex; align-items: center; justify-content: center; padding: 20px;
-    }
-    .dsale-modal-box {
-      background: var(--panel);
-      border: 2px solid color-mix(in srgb, var(--red) 40%, var(--border));
-      border-radius: 14px; max-width: 500px; width: 100%; padding: 28px;
-      display: flex; flex-direction: column; gap: 16px;
-    }
-    .dsale-modal-header { display: flex; justify-content: space-between; align-items: center; }
-    .dsale-modal-title {
-      font-family: 'Barlow Condensed',sans-serif; font-size: 1.25rem; font-weight: 800;
-      letter-spacing: 2px; text-transform: uppercase; color: var(--fg);
-    }
-    .dsale-modal-close {
-      background: none; border: none; color: var(--fg); opacity: 0.45;
-      font-size: 1.5rem; cursor: pointer; line-height: 1; padding: 2px 6px; border-radius: 4px;
-    }
-    .dsale-modal-close:hover { opacity: 1; }
+    .dsale-panel-tab.active { color:var(--red); border-bottom-color:var(--red); }
+    .dsale-panel-tab:disabled { opacity:0.4; cursor:not-allowed; }
+    .dsale-panel-dot { width:6px; height:6px; border-radius:50%; background:var(--red); }
+    .dsale-panel-body { padding:22px 24px 26px; display:flex; flex-direction:column; gap:16px; }
+    .dsale-connect-prompt { display:flex; flex-direction:column; gap:14px; text-align:center; padding:12px 4px; }
+    .dsale-connect-prompt p { font-size:0.82rem; line-height:1.6; opacity:0.62; margin:0; }
+
+    /* Shared buy/claim form controls */
     .dsale-modal-label { font-size: 0.6rem; letter-spacing: 2px; text-transform: uppercase; opacity: 0.42; margin-bottom: 8px; }
     .dsale-modal-seg { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
     .dsale-seg-btn {
@@ -207,8 +192,17 @@
     .dsale-modal-status.pending { border-color: color-mix(in srgb, var(--fg) 34%, transparent); color: color-mix(in srgb, var(--fg) 62%, transparent); }
     .dsale-modal-status.success { border-color: color-mix(in srgb, var(--red) 45%, transparent); color: var(--red); }
     .dsale-modal-status.error   { border-color: var(--red); color: var(--red); }
-    @media (max-width: 560px) {
-      .dsale-discount-line { white-space: normal; }
+
+    @media (max-width: 900px) {
+      .dsale-grid { grid-template-columns:1fr; }
+      .dsale-panel { position:static; }
+      .dsale-info { text-align:center; }
+      .dsale-title, .dsale-desc { margin-left:auto; margin-right:auto; }
+      .dsale-avail { text-align:left; }
+    }
+    @media (max-width: 700px) {
+      .dsale-wrap { padding:28px 14px 56px; }
+      .dsale-title { font-size:clamp(1.9rem,7vw,2.6rem); }
       .dsale-modal-seg { grid-template-columns: 1fr; }
     }
 
@@ -815,18 +809,29 @@
     }
     .farms-brand-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .farms-title {
-      font-family: 'Barlow Condensed', sans-serif;
-      font-size: 1.55rem;
-      font-weight: 800;
+      font-family: 'Permanent Marker', cursive;
+      font-size: 1.8rem;
+      font-weight: 400;
+      line-height: 0.9;
+      letter-spacing: 1px;
       color: var(--red);
-      line-height: 1;
+      background: linear-gradient(
+        135deg,
+        var(--red),
+        color-mix(in srgb, var(--fg) 42%, var(--red))
+      );
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      white-space: nowrap;
     }
     .farms-count {
       font-family: 'Space Mono', monospace;
-      font-size: 0.72rem;
-      color: var(--fg);
-      opacity: 0.5;
-      margin-left: 6px;
+      font-size: 0.88rem;
+      color: color-mix(in srgb, var(--fg) 56%, transparent);
+      opacity: 1;
+      margin-left: 0;
+      white-space: nowrap;
     }
     .farms-subtitle {
       font-size: 0.62rem;
@@ -897,28 +902,39 @@
       background: color-mix(in srgb, var(--red) 16%, var(--panel));
     }
     .farm-total-tvl {
-      width: min(460px, 100%);
-      margin: 0 auto 20px;
-      padding: 14px 22px;
-      border-radius: 8px;
-      background: color-mix(in srgb, var(--red) 16%, var(--panel));
-      color: var(--fg);
-      text-align: center;
+      width: min(360px, 92%);
+      margin: 20px auto 0;
+      padding: 16px 22px;
+      border-radius: 10px;
+      border: 1px solid color-mix(in srgb, var(--farm-theme-text, #4facfe) 24%, transparent);
+      background: color-mix(in srgb, var(--farm-theme-bg, #071a2b) 86%, #020812);
+      box-shadow: 0 16px 42px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.04);
       font-family: 'DM Sans', sans-serif;
-      font-size: 0.9rem;
+      font-size: 1.18rem;
       font-weight: 800;
-      letter-spacing: 0.02em;
-      box-shadow: 0 0 22px color-mix(in srgb, var(--red) 10%, transparent);
+      text-align: center;
+      color: color-mix(in srgb, var(--farm-theme-text, #4facfe) 64%, #ffffff);
     }
-    .farm-total-tvl b {
-      color: var(--red);
-      font-weight: 900;
+    .farm-total-tvl .farm-summary-value {
+      font-size: 1.22rem;
     }
+    .farm-tvl-change {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.82rem;
+      font-weight: 700;
+      margin-left: 10px;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+    }
+    .farm-tvl-change.pct-up { color: #39ff7e; }
+    .farm-tvl-change.pct-dn { color: #ff4e6a; }
+    .farm-tvl-change.pct-neu { color: var(--farm-theme-muted, #8ba1b8); }
+    .farm-tvl-change[hidden] { display: none; }
     .farm-highlights {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 18px;
-      margin: 0 0 16px;
+      margin: 18px 0 16px;
       padding: 16px;
       border: 1px solid color-mix(in srgb, var(--red) 24%, transparent);
       border-radius: 8px;
@@ -1208,28 +1224,126 @@
       color: color-mix(in srgb, var(--fg) 65%, var(--bg));
     }
 
-    /* Total Rewards banner (claimable credit + pending, like the official site) */
-    .farms-rewards-banner {
+    /* CashX farm summary: copied from the CashX Farms layout. */
+    .farm-summary-value {
+      color: var(--farm-theme-text, var(--fg));
+      margin-left: 6px;
+      white-space: nowrap;
+    }
+    .farm-claimable-summary {
+      margin: 12px 0 15px;
+      padding: 17px 18px;
+      border-radius: 10px;
+      border: 1px solid color-mix(in srgb, var(--fg) 28%, transparent);
+      background: color-mix(in srgb, var(--bg) 72%, transparent);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: color-mix(in srgb, var(--fg) 58%, transparent);
       display: flex;
       align-items: center;
       justify-content: center;
+      gap: clamp(16px, 4vw, 56px);
+    }
+    .farm-claimable-main {
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: 6px;
+      min-width: 0;
       flex-wrap: wrap;
-      gap: 10px 16px;
-      margin-bottom: 16px;
-      padding: 12px 18px;
-      border: 1px solid color-mix(in srgb, var(--red) 40%, transparent);
-      border-radius: 8px;
-      background: color-mix(in srgb, var(--red) 10%, var(--panel));
-      font-family: 'Space Mono', monospace;
-      font-size: 0.82rem;
-      color: color-mix(in srgb, var(--fg) 75%, var(--bg));
     }
-    .farms-rewards-banner b {
-      color: var(--fg);
-      font-size: 0.96rem;
+    .farm-claimable-summary .farm-summary-value {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 1.15rem;
+      letter-spacing: 0;
+      text-transform: none;
+    }
+    .farm-positions-label {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.78rem;
       font-weight: 800;
+      letter-spacing: 0;
+      text-transform: none;
+      color: color-mix(in srgb, var(--fg) 72%, #ffffff);
+      white-space: nowrap;
     }
-    .farms-rewards-banner .bfc-status { margin: 0; min-height: 0; }
+    .farm-claim-all-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      min-width: 0;
+      flex-wrap: wrap;
+    }
+    .farm-claim-all-btn {
+      min-height: 34px;
+      padding: 0 18px;
+      border: 1px solid color-mix(in srgb, var(--red) 54%, transparent);
+      border-radius: 999px;
+      background: linear-gradient(
+        135deg,
+        var(--red),
+        color-mix(in srgb, var(--red) 64%, var(--bg))
+      );
+      color: #fff;
+      box-shadow: 0 10px 28px color-mix(in srgb, var(--red) 22%, transparent);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.66rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: transform .18s ease, opacity .18s ease, box-shadow .18s ease;
+      white-space: nowrap;
+    }
+    .farm-claim-all-btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 14px 34px color-mix(in srgb, var(--red) 32%, transparent);
+    }
+    .farm-claim-all-btn:disabled {
+      opacity: 0.36;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    .farm-claim-all-btn.claiming {
+      opacity: 0.78;
+      cursor: wait;
+    }
+    .farm-claim-all-status {
+      flex: 1 0 100%;
+      max-width: 340px;
+      color: color-mix(in srgb, var(--fg) 62%, transparent);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.58rem;
+      line-height: 1.3;
+      white-space: normal;
+      justify-content: flex-end;
+      text-align: right;
+    }
+    .farm-claim-all-status.err {
+      color: #f87171;
+    }
+    @media (max-width: 560px) {
+      .farm-claimable-summary {
+        align-items: stretch;
+        flex-direction: column;
+        text-align: center;
+      }
+      .farm-claimable-main {
+        justify-content: center;
+      }
+      .farm-claim-all-wrap {
+        justify-content: center;
+      }
+      .farm-claim-all-status {
+        text-align: center;
+        justify-content: center;
+      }
+    }
 
     /* Staked LP underlying-token breakdown row */
     .bfc-breakdown {
@@ -1476,19 +1590,23 @@
     }
 
     /* CashX-style farm card theme pass */
-    .farms-shell {
-      --farm-card: color-mix(in srgb, var(--panel) 94%, var(--bg));
-      --farm-metric: color-mix(in srgb, var(--fg) 8%, var(--panel));
-      --farm-muted: color-mix(in srgb, var(--fg) 62%, var(--bg));
-      --farm-text: var(--fg);
-      --farm-border-soft: color-mix(in srgb, var(--fg) 14%, transparent);
-      --farm-border-theme: color-mix(in srgb, var(--red) 38%, transparent);
-      padding: 0;
-      border: none;
-      border-radius: 0;
-      background: transparent;
-      box-shadow: none;
-    }
+.farms-shell {
+  --farm-card: color-mix(in srgb, var(--panel) 94%, var(--bg));
+  --farm-metric: color-mix(in srgb, var(--fg) 8%, var(--panel));
+  --farm-muted: color-mix(in srgb, var(--fg) 62%, var(--bg));
+  --farm-text: var(--fg);
+  --farm-border-soft: color-mix(in srgb, var(--fg) 14%, transparent);
+  --farm-border-theme: color-mix(in srgb, var(--red) 38%, transparent);
+  padding: 18px 20px;
+  border: 1px solid color-mix(in srgb, var(--red) 32%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 color-mix(in srgb, var(--fg) 5%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
     .farms-brand-logo {
       width: 42px;
       height: 42px;

@@ -32,7 +32,8 @@ export function SalePage({ wallet }: { wallet: WalletState }) {
   const [pendingWei, setPendingWei] = useState<bigint | null>(null);
   const [bonusWei, setBonusWei] = useState<bigint>(0n);
 
-  const [buyOpen, setBuyOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"buy" | "claim">("buy");
+
   const [buyMethod, setBuyMethod] = useState<BuyMethod>("PLS");
   const [buyPool, setBuyPool] = useState(POOL_10Y);
   const [buyAmount, setBuyAmount] = useState("");
@@ -40,7 +41,6 @@ export function SalePage({ wallet }: { wallet: WalletState }) {
   const [buyBusy, setBuyBusy] = useState(false);
   const [buyStatus, setBuyStatus] = useState<ModalStatus>(null);
 
-  const [claimOpen, setClaimOpen] = useState(false);
   const [claimPool, setClaimPool] = useState(POOL_10Y);
   const [claimAmount, setClaimAmount] = useState("");
   const [claimBusy, setClaimBusy] = useState(false);
@@ -88,17 +88,20 @@ export function SalePage({ wallet }: { wallet: WalletState }) {
     void load();
   }, [load]);
 
-  // ── Buy modal ──
-  function openBuyModal() {
-    if (!wallet.address) {
-      alert("Connect your wallet first.");
-      return;
-    }
+  // ── Buy / Claim tab switching ──
+  function switchToBuy() {
+    setActiveTab("buy");
     setBuyAmount("");
     setBuyQuote("—");
     setBuyStatus(null);
     setBuyBusy(false);
-    setBuyOpen(true);
+  }
+
+  function switchToClaim() {
+    setActiveTab("claim");
+    setClaimAmount(parseFloat(formatEther(totalPending)).toFixed(0));
+    setClaimStatus(null);
+    setClaimBusy(false);
   }
 
   function scheduleQuote(amtStr: string, method: BuyMethod, pool: string) {
@@ -186,18 +189,6 @@ export function SalePage({ wallet }: { wallet: WalletState }) {
     }
   }
 
-  // ── Claim modal ──
-  function openClaimModal() {
-    if (!wallet.address) {
-      alert("Connect your wallet first.");
-      return;
-    }
-    setClaimAmount(parseFloat(formatEther(totalPending)).toFixed(0));
-    setClaimStatus(null);
-    setClaimBusy(false);
-    setClaimOpen(true);
-  }
-
   async function executeClaim() {
     if (!claimAmount || parseFloat(claimAmount) <= 0) {
       setClaimStatus({ kind: "error", text: "Enter an amount to claim." });
@@ -233,266 +224,256 @@ export function SalePage({ wallet }: { wallet: WalletState }) {
   return (
     <main className="legacy-main">
       <div className="dsale-wrap">
-        <div className="dsale-card">
-          <div className="dsale-logo">DegenStrategy</div>
-          <div className="dsale-title">Limited Time DEGEN Miner Sale!</div>
-          <p className="dsale-desc">
-            Sale proceeds are used to create OINK reserves and fill the
-            decentralized treasury!
-            <br />
-            Buy a virtual DEGEN miner that helps secure the protocol — you get
-            a discount and protocol rewards for doing so!
-          </p>
+        <div className="dsale-grid">
+          <section className="dsale-info">
+            <h1 className="dsale-title">Limited Time DEGEN Miner Sale!</h1>
+            <p className="dsale-desc">
+              Sale proceeds are used to create OINK reserves and fill the
+              decentralized treasury!
+              <br />
+              Buy a virtual DEGEN miner that helps secure the protocol — you get
+              a discount and protocol rewards for doing so!
+            </p>
 
-          <div className="dsale-avail">
-            <div className="dsale-avail-label">Tokens Available For Sale</div>
-            <div className="dsale-avail-val">
-              {availText ?? <span className="spinner" />}
+            <div className="dsale-avail">
+              <div className="dsale-avail-label">Tokens Available For Sale</div>
+              <div className="dsale-avail-val">
+                {availText ?? <span className="spinner" />}
+              </div>
             </div>
-          </div>
 
-          <div className="dsale-discounts">
-            <div className="dsale-discounts-title">Available discounts:</div>
-            <div className="dsale-discount-line">
-              10 Year Miner: ~30% bonus tokens
+            <div className="dsale-anychain">
+              <div className="dsale-anychain-headline">
+                Pay with <em>any token</em> on <em>any chain</em>
+              </div>
+              <div className="dsale-anychain-chips">
+                {["ETH", "BNB", "SOL", "ARB", "BASE", "+ more"].map((chain) => (
+                  <span key={chain} className="dsale-anychain-chip">
+                    {chain}
+                  </span>
+                ))}
+              </div>
+              <a
+                className="dsale-anychain-link"
+                href="https://degen-pls.com/?buy"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <strong>
+                  Get DEGEN on DegenStrategy
+                  <span className="dsale-anychain-arrow">→</span>
+                </strong>
+              </a>
             </div>
-            <div className="dsale-discount-line">
-              1 Year Miner: ~10% bonus tokens
-            </div>
-            <div className="dsale-discount-line">
-              3 Month Miner: ~5% bonus tokens
-            </div>
-          </div>
+          </section>
 
-          <button
-            className="dsale-action-btn any-chain"
-            onClick={() =>
-              window.open(
-                "https://degen-pls.com/?buy",
-                "_blank",
-                "noopener noreferrer",
-              )
-            }
-          >
-            Click to get DEGEN using ANY token on ANY chain
-          </button>
-          <button className="dsale-action-btn pls-buy" onClick={openBuyModal}>
-            Click to get DEGEN instantly using PLS, PLSX or INC
-          </button>
+          <aside className="dsale-panel">
+            <div className="dsale-panel-stat">
+              <div className="dsale-panel-stat-label">
+                Pending Protocol Rewards
+              </div>
+              <div className="dsale-panel-stat-val">
+                {!wallet.address
+                  ? "Connect wallet"
+                  : pendingWei === null
+                    ? "—"
+                    : `${fmt0(totalPending)} DEGEN`}
+              </div>
+              <div className="dsale-panel-stat-sub">
+                {wallet.address && pendingWei !== null && bonusWei > 0n
+                  ? `${fmt0(pendingWei)} base + ${fmt0(bonusWei)} bonus`
+                  : "Protocol DEGEN allocated to your wallet and ready to claim."}
+              </div>
+            </div>
 
-          <div className="dsale-pending-card">
-            <div className="dsale-pending-label">Your Pending DEGEN</div>
-            <div className="dsale-pending-val">
-              {!wallet.address
-                ? "Connect wallet"
-                : pendingWei === null
-                  ? "—"
-                  : `${fmt0(totalPending)} DEGEN`}
+            <div className="dsale-panel-tabs">
+              <button
+                className={`dsale-panel-tab${activeTab === "buy" ? " active" : ""}`}
+                onClick={switchToBuy}
+              >
+                Buy DEGEN
+              </button>
+              <button
+                className={`dsale-panel-tab${activeTab === "claim" ? " active" : ""}`}
+                onClick={switchToClaim}
+              >
+                Claim Rewards
+                {totalPending > 0n && <span className="dsale-panel-dot" />}
+              </button>
             </div>
-            <div className="dsale-pending-sub">
-              {wallet.address && pendingWei !== null && bonusWei > 0n
-                ? `${fmt0(pendingWei)} base + ${fmt0(bonusWei)} bonus`
-                : ""}
+
+            <div className="dsale-panel-body">
+              {!wallet.address ? (
+                <div className="dsale-connect-prompt">
+                  <p>
+                    {activeTab === "buy"
+                      ? "Connect your wallet to buy DEGEN directly with PLS, PLSX, or INC."
+                      : "Connect your wallet to view and claim your protocol rewards."}
+                  </p>
+                  <button
+                    className="dsale-modal-exec-btn"
+                    disabled={wallet.connecting}
+                    onClick={() => void wallet.connect()}
+                  >
+                    {wallet.connecting ? "Connecting…" : "Connect Wallet"}
+                  </button>
+                </div>
+              ) : activeTab === "buy" ? (
+                <>
+                  <div>
+                    <div className="dsale-modal-label">Buy With</div>
+                    <div className="dsale-modal-seg">
+                      {(
+                        [
+                          ["PLS", "PulseChain"],
+                          ["PLSX", "PulseX"],
+                          ["INC", "Incentive"],
+                        ] as const
+                      ).map(([method, sub]) => (
+                        <button
+                          key={method}
+                          className={`dsale-seg-btn${buyMethod === method ? " active" : ""}`}
+                          onClick={() => {
+                            setBuyMethod(method);
+                            scheduleQuote(buyAmount, method, buyPool);
+                          }}
+                        >
+                          {method}
+                          <span className="dsale-seg-sub">{sub}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="dsale-modal-label">
+                      Choose Discount (Lock-up Duration)
+                    </div>
+                    <div className="dsale-modal-seg">
+                      {(
+                        [
+                          [POOL_10Y, "10 Year", "~30% bonus"],
+                          [POOL_1Y, "1 Year", "~10% bonus"],
+                          [POOL_3M, "3 Month", "~5% bonus"],
+                        ] as const
+                      ).map(([pool, label, sub]) => (
+                        <button
+                          key={pool}
+                          className={`dsale-seg-btn${buyPool === pool ? " active" : ""}`}
+                          onClick={() => {
+                            setBuyPool(pool);
+                            scheduleQuote(buyAmount, buyMethod, pool);
+                          }}
+                        >
+                          {label}
+                          <span className="dsale-seg-sub">{sub}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="dsale-modal-label">Amount to Spend</div>
+                    <input
+                      className="dsale-modal-input"
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder="0.00"
+                      value={buyAmount}
+                      onChange={(event) => {
+                        setBuyAmount(event.target.value);
+                        scheduleQuote(event.target.value, buyMethod, buyPool);
+                      }}
+                    />
+                  </div>
+
+                  <div className="dsale-modal-quote">
+                    <span className="dsale-modal-quote-label">
+                      DEGEN You&apos;ll Receive
+                    </span>
+                    <span className="dsale-modal-quote-val">{buyQuote}</span>
+                  </div>
+
+                  <button
+                    className="dsale-modal-exec-btn"
+                    disabled={buyBusy}
+                    onClick={() => void executeBuy()}
+                  >
+                    Get DEGEN!
+                  </button>
+                  {buyStatus && (
+                    <div className={`dsale-modal-status ${buyStatus.kind}`}>
+                      {buyStatus.text}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="dsale-modal-quote">
+                    <span className="dsale-modal-quote-label">
+                      Total Claimable
+                    </span>
+                    <span className="dsale-modal-quote-val">
+                      {fmt0(totalPending)} DEGEN
+                    </span>
+                  </div>
+
+                  <div>
+                    <div className="dsale-modal-label">Claim Amount</div>
+                    <input
+                      className="dsale-modal-input"
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder="Amount of DEGEN to claim"
+                      value={claimAmount}
+                      onChange={(event) => setClaimAmount(event.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <div className="dsale-modal-label">
+                      Stake Claimed Tokens Into
+                    </div>
+                    <div className="dsale-modal-seg">
+                      {(
+                        [
+                          [POOL_10Y, "10 Year", "100% payout"],
+                          [POOL_1Y, "1 Year", "5% payout"],
+                          [POOL_3M, "3 Month", "2.5% payout"],
+                        ] as const
+                      ).map(([pool, label, sub]) => (
+                        <button
+                          key={pool}
+                          className={`dsale-seg-btn${claimPool === pool ? " active" : ""}`}
+                          onClick={() => setClaimPool(pool)}
+                        >
+                          {label}
+                          <span className="dsale-seg-sub">{sub}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <button
+                    className="dsale-modal-exec-btn"
+                    disabled={claimBusy || totalPending === 0n}
+                    onClick={() => void executeClaim()}
+                  >
+                    Claim Tokens
+                  </button>
+                  {claimStatus && (
+                    <div className={`dsale-modal-status ${claimStatus.kind}`}>
+                      {claimStatus.text}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
-            <button
-              className="dsale-claim-action-btn"
-              disabled={!wallet.address || totalPending === 0n}
-              onClick={openClaimModal}
-            >
-              Claim Tokens
-            </button>
-          </div>
+          </aside>
         </div>
       </div>
-
-      {/* ── DEGEN Sale Buy Modal ── */}
-      {buyOpen && (
-        <div
-          className="dsale-modal-overlay"
-          style={{ display: "flex" }}
-          onClick={(event) => {
-            if (event.target === event.currentTarget) setBuyOpen(false);
-          }}
-        >
-          <div className="dsale-modal-box">
-            <div className="dsale-modal-header">
-              <div className="dsale-modal-title">Buy DEGEN Tokens</div>
-              <button
-                className="dsale-modal-close"
-                onClick={() => setBuyOpen(false)}
-              >
-                ×
-              </button>
-            </div>
-
-            <div>
-              <div className="dsale-modal-label">Buy With</div>
-              <div className="dsale-modal-seg">
-                {(
-                  [
-                    ["PLS", "PulseChain"],
-                    ["PLSX", "PulseX"],
-                    ["INC", "Incentive"],
-                  ] as const
-                ).map(([method, sub]) => (
-                  <button
-                    key={method}
-                    className={`dsale-seg-btn${buyMethod === method ? " active" : ""}`}
-                    onClick={() => {
-                      setBuyMethod(method);
-                      scheduleQuote(buyAmount, method, buyPool);
-                    }}
-                  >
-                    {method}
-                    <span className="dsale-seg-sub">{sub}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <div className="dsale-modal-label">
-                Choose Discount (Lock-up Duration)
-              </div>
-              <div className="dsale-modal-seg">
-                {(
-                  [
-                    [POOL_10Y, "10 Year", "~30% bonus"],
-                    [POOL_1Y, "1 Year", "~10% bonus"],
-                    [POOL_3M, "3 Month", "~5% bonus"],
-                  ] as const
-                ).map(([pool, label, sub]) => (
-                  <button
-                    key={pool}
-                    className={`dsale-seg-btn${buyPool === pool ? " active" : ""}`}
-                    onClick={() => {
-                      setBuyPool(pool);
-                      scheduleQuote(buyAmount, buyMethod, pool);
-                    }}
-                  >
-                    {label}
-                    <span className="dsale-seg-sub">{sub}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <div className="dsale-modal-label">Amount to Spend</div>
-              <input
-                className="dsale-modal-input"
-                type="number"
-                min="0"
-                step="any"
-                placeholder="0.00"
-                value={buyAmount}
-                onChange={(event) => {
-                  setBuyAmount(event.target.value);
-                  scheduleQuote(event.target.value, buyMethod, buyPool);
-                }}
-              />
-            </div>
-
-            <div className="dsale-modal-quote">
-              <span className="dsale-modal-quote-label">
-                DEGEN You&apos;ll Receive
-              </span>
-              <span className="dsale-modal-quote-val">{buyQuote}</span>
-            </div>
-
-            <button
-              className="dsale-modal-exec-btn"
-              disabled={buyBusy}
-              onClick={() => void executeBuy()}
-            >
-              Get DEGEN!
-            </button>
-            {buyStatus && (
-              <div className={`dsale-modal-status ${buyStatus.kind}`}>
-                {buyStatus.text}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── DEGEN Sale Claim Modal ── */}
-      {claimOpen && (
-        <div
-          className="dsale-modal-overlay"
-          style={{ display: "flex" }}
-          onClick={(event) => {
-            if (event.target === event.currentTarget) setClaimOpen(false);
-          }}
-        >
-          <div className="dsale-modal-box">
-            <div className="dsale-modal-header">
-              <div className="dsale-modal-title">Claim DEGEN Tokens</div>
-              <button
-                className="dsale-modal-close"
-                onClick={() => setClaimOpen(false)}
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="dsale-modal-quote">
-              <span className="dsale-modal-quote-label">Total Claimable</span>
-              <span className="dsale-modal-quote-val">
-                {fmt0(totalPending)} DEGEN
-              </span>
-            </div>
-
-            <div>
-              <div className="dsale-modal-label">Claim Amount</div>
-              <input
-                className="dsale-modal-input"
-                type="number"
-                min="0"
-                step="any"
-                placeholder="Amount of DEGEN to claim"
-                value={claimAmount}
-                onChange={(event) => setClaimAmount(event.target.value)}
-              />
-            </div>
-
-            <div>
-              <div className="dsale-modal-label">Stake Claimed Tokens Into</div>
-              <div className="dsale-modal-seg">
-                {(
-                  [
-                    [POOL_10Y, "10 Year", "100% payout"],
-                    [POOL_1Y, "1 Year", "5% payout"],
-                    [POOL_3M, "3 Month", "2.5% payout"],
-                  ] as const
-                ).map(([pool, label, sub]) => (
-                  <button
-                    key={pool}
-                    className={`dsale-seg-btn${claimPool === pool ? " active" : ""}`}
-                    onClick={() => setClaimPool(pool)}
-                  >
-                    {label}
-                    <span className="dsale-seg-sub">{sub}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <button
-              className="dsale-modal-exec-btn"
-              disabled={claimBusy}
-              onClick={() => void executeClaim()}
-            >
-              Claim Tokens
-            </button>
-            {claimStatus && (
-              <div className={`dsale-modal-status ${claimStatus.kind}`}>
-                {claimStatus.text}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </main>
   );
 }
