@@ -28,7 +28,7 @@ const PATTERN_DEFAULTS: Partial<
 > = {
   oink: { pattern: "sparkles", effectColor: "#ff8cb8", intensity: 0.6 },
   light: { pattern: "dots" },
-  midnight: { pattern: "rain", effectColor: "#ffffff", intensity: 0.5 },
+  midnight: { pattern: "constellations", effectColor: "#ffffff", intensity: 0.5 },
   paper: { pattern: "dots" },
   cyberpunk: { pattern: "synapse" },
   retrowave: { pattern: "embers" },

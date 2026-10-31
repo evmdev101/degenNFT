@@ -53,7 +53,7 @@ const themeCollections: { title: string; names: readonly ThemeName[] }[] = [
 export function useTheme() {
   const [theme, setTheme] = useState<ThemeName>(() => {
     const saved = readPreference("degen-react-theme");
-    return isThemeName(saved) ? saved : "original";
+    return isThemeName(saved) ? saved : "midnight";
   });
   useLayoutEffect(() => {
     applyTheme(theme);

@@ -43,7 +43,7 @@ export const THEMES = {
     panel: "#161b22",
     border: "#30363d",
     accent: "#f85149",
-    effect: "rain",
+    effect: "constellations",
   },
   paper: {
     bg: "#faf8f5",

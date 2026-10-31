@@ -1,9 +1,9 @@
 :root {
-  --bg: #282c34;
-  --fg: #9cdef2;
-  --panel: #111;
-  --border: #355a66;
-  --accent: #e06c75;
+  --bg: #0d1117;
+  --fg: #c9d1d9;
+  --panel: #161b22;
+  --border: #30363d;
+  --accent: #f85149;
   font-family: "Space Mono", monospace;
   color: var(--fg);
   background: var(--bg);

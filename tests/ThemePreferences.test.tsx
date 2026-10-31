@@ -25,11 +25,11 @@ afterEach(() => {
 });
 
 describe("theme preferences", () => {
-  it("falls back to the original palette for a saved name that is not a preset", () => {
+  it("falls back to the Midnight palette for a saved name that is not a preset", () => {
     localStorage.setItem("degen-react-theme", "toString");
     render(<ThemeControls />);
-    expect(document.documentElement.style.getPropertyValue("--accent")).toBe(THEMES.original.accent);
-    expect(localStorage.getItem("degen-react-theme")).toBe("original");
+    expect(document.documentElement.style.getPropertyValue("--accent")).toBe(THEMES.midnight.accent);
+    expect(localStorage.getItem("degen-react-theme")).toBe("midnight");
   });
 
   it("restores valid custom colors without applying unrelated or invalid saved values", () => {
