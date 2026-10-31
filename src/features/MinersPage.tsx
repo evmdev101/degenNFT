@@ -165,7 +165,7 @@ export function MinersPage({ wallet, poolAddress }: { wallet: WalletState; poolA
 
   return (
     <main className="legacy-main">
-      <div style={{ padding: 28 }}>
+      <div className="deploy-page-content">
         <div style={{ marginBottom: 22 }}>
           <div
             style={{

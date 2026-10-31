@@ -18,6 +18,7 @@ import "./features/farm-improvements.css";
 import "./features/miner-cards.css";
 import "./features/dashboard/dashboard.css";
 import "./components/theme-picker.css";
+import "./components/mobile.css";
 
 window.addEventListener("vite:preloadError", event => {
   if (recoverStalePage((event as Event & { payload: unknown }).payload)) event.preventDefault();

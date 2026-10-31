@@ -172,6 +172,7 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
   const [modalStatus, setModalStatus] = useState("");
   const [modalBusy, setModalBusy] = useState(false);
   const loadSeq = useRef(0);
+  const refreshMiners = useRef<() => Promise<void>>(async () => {});
   const submitting = useRef(false);
   const pageActive = usePageActive();
 
@@ -199,7 +200,12 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
     setSummary(snapshot?.summary ?? { state: "loading" });
 
     const provider = await getPublicProvider();
+    if (loadSeq.current !== seq) return;
     const collected: Miner[] = [];
+    const visible = new Map((snapshot?.miners ?? []).map(miner => [minerPid(miner), miner]));
+    const publish = () => {
+      if (loadSeq.current === seq) setMiners([...visible.values()]);
+    };
     const failed = new Set<string>();
 
     async function fetchPoolMiners(poolAddr: string) {
@@ -214,7 +220,14 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
           12000,
         )) as [bigint, bigint];
         const n = Number(count);
-        if (n === 0) return result;
+        if (loadSeq.current !== seq) return result;
+        if (n === 0) {
+          for (const [key, miner] of visible) {
+            if (miner.poolAddr.toLowerCase() === poolAddr.toLowerCase()) visible.delete(key);
+          }
+          publish();
+          return result;
+        }
 
         let gracePeriod: number | null = null;
         let contractDuration: number | null = null;
@@ -224,45 +237,18 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
         }
         catch { /* Unknown grace rules must not be displayed as a zero fee. */ }
 
-        // Fetch stake info in small chunks with per-call timeouts — large
-        // parallel bursts get rate-limited (same as the original)
-        const infos: (Record<string, bigint> | null)[] = new Array(n).fill(
-          null,
-        );
-        const CHUNK = 8;
-        for (let start = 0; start < n; start += CHUNK) {
-          const idxs = Array.from(
-            { length: Math.min(CHUNK, n - start) },
-            (_, k) => start + k,
-          );
-          const results = await Promise.all(
-            idxs.map((i) =>
-              withTimeout(pool.userInfo(address, i), 8000).catch(() => null),
-            ),
-          );
-          results.forEach((r, k) => {
-            infos[idxs[k]] = r as Record<string, bigint> | null;
-          });
+        if (loadSeq.current !== seq) return result;
+        const poolMiners = new Map((snapshot?.miners ?? [])
+          .filter(miner => miner.poolAddr.toLowerCase() === poolAddr.toLowerCase() && miner.stakeId < n)
+          .map(miner => [miner.stakeId, miner]));
+        for (const [key, miner] of visible) {
+          if (miner.poolAddr.toLowerCase() === poolAddr.toLowerCase() && miner.stakeId >= n) visible.delete(key);
         }
-        for (let i = 0; i < n; i++) {
-          if (!infos[i])
-            infos[i] = (await withTimeout(pool.userInfo(address, i), 8000).catch(
-              () => null,
-            )) as Record<string, bigint> | null;
-        }
-
         const now = Math.floor(Date.now() / 1000);
-        for (let i = 0; i < n; i++) {
-          const info = infos[i];
-          if (!info) {
-            failed.add(poolAddr);
-            const previous = snapshot?.miners.find(miner => miner.poolAddr.toLowerCase() === poolAddr.toLowerCase() && miner.stakeId === i);
-            if (previous) result.push(previous);
-            continue;
-          }
+        const decode = (info: Record<string, bigint>, i: number): Miner | null => {
           const amountRaw = (info.shares * pricePerShare) / 1_000_000_000_000_000_000n;
           const amount = Number(formatEther(amountRaw));
-          if (info.shares <= 0n) continue;
+          if (info.shares <= 0n) return null;
           const served = Math.max(0, now - Number(info.lastMineredTime));
           const total = Number(info.mandatoryTimeToServe);
           const pct = total > 0 ? Math.min(100, (served / total) * 100) : 100;
@@ -273,7 +259,7 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
           const withdrawReady =
             contractDuration !== null && gracePeriod !== null && served >= poolDur && served <= poolDur + gracePeriod;
           const dailyReward = 0;
-          result.push({
+          return {
             amount,
             pct,
             progressPct,
@@ -292,8 +278,37 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
             gracePeriod,
             timingKnown: contractDuration !== null && gracePeriod !== null,
             ts: Date.now(),
-          });
+          };
+        };
+        const readStake = async (i: number) => {
+          const info = await withTimeout(pool.userInfo(address, i), 8000).catch(() => null) as Record<string, bigint> | null;
+          if (loadSeq.current !== seq) return true;
+          if (!info) return false;
+          const miner = decode(info, i);
+          if (miner) poolMiners.set(i, miner);
+          else poolMiners.delete(i);
+          // The UI map uses the same key for fresh and cached positions.
+          const visibleKey = `mc-${poolAddr.slice(2, 8)}-${i}`;
+          if (miner) visible.set(visibleKey, miner);
+          else visible.delete(visibleKey);
+          publish();
+          return true;
+        };
+        // Newest IDs first, retaining old cards until their reads complete.
+        const retry: number[] = [];
+        const CHUNK = 8;
+        for (let end = n; end > 0; end -= CHUNK) {
+          if (loadSeq.current !== seq) return result;
+          const ids = Array.from({ length: Math.min(CHUNK, end) }, (_, k) => end - 1 - k);
+          const reads = await Promise.all(ids.map(readStake));
+          reads.forEach((ok, k) => { if (!ok) retry.push(ids[k]); });
         }
+        for (const i of retry) {
+          if (loadSeq.current !== seq) return result;
+          if (!await readStake(i)) failed.add(poolAddr);
+        }
+        publish();
+        result.push(...poolMiners.values());
       } catch (e) {
         console.warn("fetchPoolMiners", poolAddr, (e as Error).message);
         failed.add(poolAddr);
@@ -305,14 +320,13 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
     // Stream results in as pools resolve — a few at a time (original used 3)
     let cursor = 0;
     async function poolWorker() {
-      while (cursor < DEGEN_POOL_ADDRS.length) {
+      while (cursor < DEGEN_POOL_ADDRS.length && loadSeq.current === seq) {
         const poolAddr = DEGEN_POOL_ADDRS[cursor++];
         try {
           const m = await fetchPoolMiners(poolAddr);
           collected.push(...m);
         } catch { failed.add(poolAddr); }
         if (loadSeq.current !== seq) return;
-        if (!snapshot) setMiners([...collected]);
         setPendingPools((p) => Math.max(0, p - 1));
       }
     }
@@ -349,11 +363,17 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
 
   useEffect(() => {
     if (!pageActive) return;
-    let disposed = false;
+    let disposed = false, running = false, queued = false;
+    let interrupt: (() => void) | undefined;
+    let confirmationFollowUp = false;
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
-      if (disposed) return;
-      try { if (!document.hidden) await loadStakedMiners(); }
+      if (disposed || document.hidden) return;
+      if (running) { queued = true; return; }
+      running = true;
+      clearTimeout(timer);
+      const interrupted = new Promise<void>(resolve => { interrupt = resolve; });
+      try { await Promise.race([loadStakedMiners(), interrupted]); }
       catch {
         if (!disposed) {
           setFailedPools(DEGEN_POOL_ADDRS.length);
@@ -361,10 +381,44 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
           setSummary(previous => previous.state === "ready" ? previous : { state: "error" });
         }
       }
-      finally { if (!disposed) timer = setTimeout(() => void poll(), 60_000); }
+      finally {
+        running = false;
+        interrupt = undefined;
+        if (!disposed) {
+          if (queued) { queued = false; void poll(); }
+          else {
+            // One short follow-up lets a public RPC catch up to the receipt.
+            const delay = confirmationFollowUp ? 3_000 : 60_000;
+            confirmationFollowUp = false;
+            timer = setTimeout(() => void poll(), delay);
+          }
+        }
+      }
     };
+    const resume = () => { void poll(); };
+    const confirmed = () => {
+      confirmationFollowUp = true;
+      if (running) {
+        // Ignore the old scan and stop scheduling its remaining batches.
+        // Requests already sent can finish without replacing newer results.
+        loadSeq.current += 1;
+        queued = true;
+        interrupt?.();
+      } else void poll();
+    };
+    refreshMiners.current = poll;
     void poll();
-    return () => { disposed = true; clearTimeout(timer); loadSeq.current += 1; };
+    window.addEventListener("degen:transaction-confirmed", confirmed);
+    window.addEventListener("online", resume);
+    document.addEventListener("visibilitychange", resume);
+    return () => {
+      disposed = true; clearTimeout(timer); loadSeq.current += 1;
+      interrupt?.();
+      refreshMiners.current = async () => {};
+      window.removeEventListener("degen:transaction-confirmed", confirmed);
+      window.removeEventListener("online", resume);
+      document.removeEventListener("visibilitychange", resume);
+    };
   }, [loadStakedMiners, pageActive]);
 
   // ── Modal actions (hop / withdraw / transfer) ──────────────────────────────
@@ -416,7 +470,7 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
       const [count, current, price] = await Promise.all([pool.getNrOfStakes(account), pool.userInfo(account, miner.stakeId), pool.getPricePerFullShare()]);
       const fingerprint = [current.shares, current.lastMineredTime, current.xvmcAtLastUserAction, current.lastUserActionTime, current.mandatoryTimeToServe].join(":");
       if (BigInt(miner.stakeId) >= count || fingerprint !== miner.fingerprint) {
-        void loadStakedMiners();
+        void refreshMiners.current();
         throw new Error("This miner changed. Close this panel and select its current position.");
       }
       const amountRaw = BigInt(current.shares) * BigInt(price) / 10n ** 18n;
@@ -430,7 +484,7 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
       await method.staticCall(...args);
       await confirmTransaction(await method(...args));
       setModal(null);
-      await loadStakedMiners().catch(() => undefined);
+      await refreshMiners.current().catch(() => undefined);
     } catch (error) { setModalStatus(readableError(error)); }
     finally { submitting.current = false; setModalBusy(false); }
   }

@@ -1,6 +1,7 @@
 import { Interface, toQuantity } from "ethers";
 import { describe, expect, it, vi } from "vitest";
-import { TREASURY, type DashboardAsset } from "../src/features/dashboard/config";
+import { DASHBOARD_ASSETS, TREASURY, type DashboardAsset } from "../src/features/dashboard/config";
+import { CONTRACTS } from "../src/config/contracts";
 import { aggregateInflows, readOverviewSnapshot, readTreasuryInflows, type OverviewReader } from "../src/features/dashboard/overviewData";
 
 const asset: DashboardAsset = { address: "0x0000000000000000000000000000000000000001", symbol: "TEST", decimals: 6, logo: "" };
@@ -11,6 +12,18 @@ function reader(overrides: Partial<OverviewReader> = {}): OverviewReader {
     balance: async () => 2_000_000n, prices: async () => ({ [asset.address]: 2 }), ...overrides };
 }
 describe("public overview balances", () => {
+  it("includes OINK reserves at their actual precision and counts their value once in treasury totals", async () => {
+    const oinkRaw = 110_000_000n * 10n ** 18n + 123n;
+    const balance = vi.fn(async (asset: DashboardAsset) => asset.address === CONTRACTS.oink ? oinkRaw : asset.address === CONTRACTS.degen ? 100n * 10n ** 18n : 0n);
+    const snapshot = await readOverviewSnapshot(reader({ balance, prices: async () => ({ [CONTRACTS.oink]: .00003, [CONTRACTS.degen]: 1 }) }));
+    const oink = DASHBOARD_ASSETS.find(asset => asset.address === CONTRACTS.oink)!;
+    expect(oink).toMatchObject({ symbol: "OINK", decimals: 18 });
+    expect(balance).toHaveBeenCalledWith(oink, 123);
+    expect(snapshot.holdings.filter(row => row.asset.address === CONTRACTS.oink)).toHaveLength(1);
+    expect(snapshot.holdings.find(row => row.asset.address === CONTRACTS.oink)?.raw).toBe(oinkRaw);
+    expect(snapshot.holdings.find(row => row.asset.address === CONTRACTS.oink)?.usd).toBeCloseTo(3300);
+    expect(snapshot.totalUsd).toBeCloseTo(3400);
+  });
   it("pins every amount to one block and preserves token precision", async () => {
     const balances = vi.fn(async () => 2_000_000n), supply = vi.fn(async () => 10n ** 24n);
     const snapshot = await readOverviewSnapshot(reader({ balance: balances, supply }), [asset]);

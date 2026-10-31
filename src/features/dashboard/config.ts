@@ -1,4 +1,5 @@
 import { CONTRACTS } from "../../config/contracts";
+import { TOKEN_LOGOS } from "../../config/tokenLogos";
 
 export const TREASURY = "0xD540b89Ee52F81bE921Aa856bb2808A96BA9E3a1";
 export const MINER_POOLS = [
@@ -42,6 +43,7 @@ const tokenLogo = (address: string) => `https://raw.githubusercontent.com/piteas
 export const DASHBOARD_ASSETS: readonly DashboardAsset[] = [
   { address: "0xa1077a294dde1b09bb078844df40758a5d0f9a27", symbol: "PLS", decimals: 18, native: true, logo: new URL("../../../pls.png", import.meta.url).href },
   { address: CONTRACTS.degen, symbol: "DEGEN", decimals: 18, logo: "https://raw.githubusercontent.com/degenstrategy/interface/main/img/degen.png" },
+  { address: CONTRACTS.oink, symbol: "OINK", decimals: 18, logo: TOKEN_LOGOS.OINK },
   { address: "0x6B175474E89094C44Da98b954EedeAC495271d0F", symbol: "pDAI", decimals: 18, logo: tokenLogo("0x6B175474E89094C44Da98b954EedeAC495271d0F") },
   { address: "0x2fa878Ab3F87CC1C9737Fc071108F904c0B0C95d", symbol: "INC", decimals: 18, logo: tokenLogo("0x2fa878Ab3F87CC1C9737Fc071108F904c0B0C95d") },
   { address: "0x95B303987A60C71504D99Aa1b13B4DA07b0790ab", symbol: "PLSX", decimals: 18, logo: tokenLogo("0x95B303987A60C71504D99Aa1b13B4DA07b0790ab") },
