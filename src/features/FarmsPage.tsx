@@ -2098,9 +2098,6 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
             MAX
           </button>
         </div>
-        <p className="farm-deposit-estimate" aria-live="polite">{amtWei && d.depositFeeBps !== null
-          ? `Estimated new stake: ${formatUnits(amtWei - amtWei * d.depositFeeBps / 10000n, d.decimals)} LP · deposit fee ${Number(d.depositFeeBps) / 100}%`
-          : ""}</p>
         <div className="bfc-action-grid">
           <button
             className="bfc-stake-btn"
