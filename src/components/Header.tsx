@@ -62,11 +62,9 @@ export function Header({ wallet, theme, setTheme }: {
           }} onKeyDown={event => {
             if (event.key === "Escape") { event.preventDefault(); setOpen(false); trigger.current?.focus(); }
           }}>
-            <NavLink className="degen-nav-link" to="/farms" onClick={() => setOpen(false)}
-              onMouseEnter={() => preloadPage("/farms")} onFocus={() => preloadPage("/farms")}
-              onTouchStart={() => preloadPage("/farms")}>Degen</NavLink>
             <button ref={trigger} type="button" aria-label="Degen menu"
               aria-expanded={open} aria-controls={dropdownId} onClick={() => setOpen(value => !value)}>
+              Degen
               <span aria-hidden="true">{open ? "▴" : "▾"}</span>
             </button>
             <div id={dropdownId} className="degen-nav-dropdown" hidden={!open}>

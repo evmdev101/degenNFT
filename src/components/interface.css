@@ -35,8 +35,7 @@ input, select, button { font-family: 'DM Sans', sans-serif; }
 }
 .degen-nav { position: relative; display: inline-flex; align-items: stretch; border-radius: 8px; }
 .site-header .degen-nav > :is(a,button) { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 0 14px; border: 0; border-radius: 8px; background: transparent; color: var(--header-nav-muted, #96959f); font: 700 15px/20px 'DM Sans', sans-serif; cursor: pointer; text-decoration: none; }
-.site-header .degen-nav > a { padding-right: 3px; border-radius: 8px 0 0 8px; }
-.site-header .degen-nav > button { min-width: 27px; padding-left: 5px; padding-right: 10px; border-radius: 0 8px 8px 0; }
+.site-header .degen-nav > button { gap: 8px; padding-inline: 14px; border-radius: 8px; }
 .site-header .degen-nav > button span { font-size: 10px; }
 .site-header .degen-nav:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
 .site-header .degen-nav:hover > :is(a,button) { color: var(--fg); }

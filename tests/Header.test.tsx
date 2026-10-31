@@ -41,12 +41,13 @@ describe("Header navigation", () => {
       </MemoryRouter>,
     );
 
-    const degen = screen.getByRole("link", { name: "Degen", exact: true });
-    expect(degen).toHaveAttribute("href", "/farms");
-    await user.click(degen);
+    const degen = screen.getByRole("button", { name: "Degen menu" });
+    await user.click(within(degen).getByText("Degen"));
+    expect(screen.getByTestId("location")).toHaveTextContent("/portfolio");
+    expect(degen).toHaveAttribute("aria-expanded", "true");
+    await user.click(screen.getByRole("link", { name: "Farms" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/farms");
-    expect(screen.getByRole("button", { name: "Degen menu" })).toHaveAttribute("aria-expanded", "false");
-    await user.click(screen.getByRole("button", { name: "Degen menu" }));
+    await user.click(degen);
     expect(screen.getByRole("link", { name: "Farms" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "NFTs" })).toHaveAttribute(
       "href",
@@ -83,7 +84,7 @@ describe("Header navigation", () => {
     expect(within(header).queryByRole("img", { name: "DEGEN" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Degen menu" }));
     expect(within(header).getByRole("link", { name: "Miners" })).toHaveAttribute("aria-current", "page");
-    expect(within(screen.getByRole("navigation", { name: "Primary navigation" })).getAllByRole("link")).toHaveLength(11);
+    expect(within(screen.getByRole("navigation", { name: "Primary navigation" })).getAllByRole("link")).toHaveLength(10);
     const socialLinks = within(header).getAllByRole("link").filter(link => link.classList.contains("nav-icon"));
     expect(socialLinks).toHaveLength(0);
     expect(within(header).getByRole("link", { name: "DEGEN home" })).toHaveAttribute("href", "/");
