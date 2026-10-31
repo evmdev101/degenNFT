@@ -17,14 +17,14 @@ describe("AppErrorBoundary", () => {
     consoleError.mockRestore();
   });
 
-  it("shows the normal loader without exposing an error screen", () => {
+  it("shows a concise unavailable state without exposing internal errors", () => {
     render(
       <AppErrorBoundary>
         <BrokenFeature />
       </AppErrorBoundary>,
     );
 
-    expect(screen.getByRole("status")).toHaveTextContent("Loading…");
+    expect(screen.getByRole("status")).toHaveTextContent("This page is temporarily unavailable.");
     expect(
       screen.queryByText("The dashboard hit a problem."),
     ).not.toBeInTheDocument();

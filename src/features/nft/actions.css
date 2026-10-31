@@ -477,3 +477,18 @@
     min-width: 0;
   }
 }
+
+/* Action panels leave the navigation and the rest of the page usable. */
+.nft-action-backdrop { pointer-events: none; background: none; backdrop-filter: none; align-items: flex-start; justify-content: flex-end; padding: 82px 20px 20px; }
+.nft-action-backdrop .action-modal { pointer-events: auto; max-width: min(580px, 100%); max-height: calc(100dvh - 104px); box-shadow: 0 12px 60px #0009; }
+.action-modal .form-hint { display: block; padding: 0 20px; font-size: .82rem; line-height: 1.5; color: var(--fg); }
+.action-modal .amount-max { margin: 8px 20px; padding: 6px 14px; border: 1px solid var(--accent); border-radius: 6px; color: var(--accent); background: var(--panel); }
+.calculator-assumptions { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 24px 0; }
+.calculator-assumptions label { display: grid; gap: 8px; font-size: .9rem; }
+.calculator-assumptions input { min-width: 0; padding: 12px; background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; }
+.rewards-snapshot-note { padding: 0 18px; font-size: .8rem; color: var(--fg); }
+.rewards-token-grid strong, .metric-value-row strong { font-variant-numeric: tabular-nums; }
+.action-modal input, .action-modal select { font-size: 1rem; }
+@media (max-width: 650px) { .nft-action-backdrop { padding: 74px 8px 8px; } .nft-action-backdrop .action-modal { max-height: calc(100dvh - 90px); } .calculator-assumptions { grid-template-columns: 1fr; } }
+
+.nft-tab-panel[hidden] { display: none !important; }

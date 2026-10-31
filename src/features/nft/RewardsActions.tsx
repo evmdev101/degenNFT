@@ -1,5 +1,6 @@
-import { Contract, ZeroAddress, formatEther, parseEther } from "ethers";
-import { useEffect, useMemo, useState } from "react";
+import { confirmTransaction } from "../../lib/transactions";
+import { Contract, ZeroAddress, formatEther, parseEther, parseUnits, type JsonRpcSigner } from "ethers";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   CONTRACTS,
@@ -18,8 +19,35 @@ import {
   HARVEST_DESTINATIONS,
   SETTINGS_POOLS,
 } from "./options";
+import { usePageActive } from "../../hooks/usePageActive";
+import { HelpTip } from "../../components/HelpTip";
 import type { RewardToken } from "./options";
 
+// Verified NFTVault/NFTMint source: reference-original/extracted/NFT*.verified.json.
+const NFT_ACTION_ABI = [...NFT_ABI,
+  "function poolPayout(address) view returns (uint256 amount, uint256 minServe)",
+  "function poolPayout2(address) view returns (uint256 amount, uint256 minServe)",
+  "function defaultDirectPayout() view returns (uint256)",
+  "function defaultFee() view returns (uint256)",
+] as const;
+const MINT_ACTION_ABI = [...MINT_ABI,
+  "function penalty(address) view returns (uint256)",
+  "function getPricesInInputToken(address) view returns (uint256 oinkPerInputToken, uint256 tokenXPerInputToken)",
+] as const;
+type HarvestRule = { bps: bigint; minServe: bigint };
+export function parseNftFee(value: string): bigint {
+  const bps = parseUnits(value || "0", 2);
+  if (bps < 0n || bps > 2500n) throw new Error("Automatic harvest fee must be between 0% and 25%, with up to two decimal places.");
+  return bps;
+}
+export function burnPayment(purchase: Purchase, amount: bigint): bigint {
+  return amount === purchase.amount ? purchase.amountPaid : purchase.amountPaid / purchase.amount * amount;
+}
+async function readHarvestRule(contract: Contract, token: RewardToken, destination: string): Promise<HarvestRule> {
+  if (destination === "WALLET") return { bps: BigInt(await contract.defaultDirectPayout()), minServe: 0n };
+  const raw = token === "OINK" ? await contract.poolPayout(destination) : await contract.poolPayout2(destination);
+  return { bps: BigInt(raw.amount), minServe: BigInt(raw.minServe) };
+}
 type Action = "harvest" | "settings" | "burn" | null;
 type Settings = {
   oinkPool: string;
@@ -57,25 +85,15 @@ const compactDisplay = (value: bigint | number) => {
   if (amount >= 1e3) return `${(amount / 1e3).toFixed(2)}K`;
   return amount.toFixed(4);
 };
-const harvestInput = (value: bigint) => {
-  const amount = Number(formatEther(value));
-  if (!Number.isFinite(amount) || amount <= 0) return "0";
-  return amount >= 1_000
-    ? String(Math.floor(amount))
-    : String(Number(amount.toFixed(6)));
-};
-const canonicalPool = (
-  token: RewardToken,
-  address: unknown,
-  fallback: string,
-) =>
-  SETTINGS_POOLS[token].find(
-    (item) =>
-      item.address.toLowerCase() === String(address || "").toLowerCase(),
-  )?.address || fallback;
+const harvestInput = (value: bigint) => formatEther(value);
+async function checkNetworkFee(signer: JsonRpcSigner, gas: bigint) {
+  const [fee, balance] = await Promise.all([signer.provider.getFeeData(), signer.provider.getBalance(await signer.getAddress())]);
+  const price = fee.maxFeePerGas ?? fee.gasPrice;
+  if (!price || balance < gas * price * 120n / 100n) throw new Error("Keep enough PLS for the network fee.");
+}
 const initialSettings: Settings = {
-  oinkPool: SETTINGS_POOLS.OINK.at(-1)!.address,
-  degenPool: SETTINGS_POOLS.DEGEN.at(-1)!.address,
+  oinkPool: ZeroAddress,
+  degenPool: ZeroAddress,
   minOink: "0",
   minDegen: "0",
   fee: "0",
@@ -83,18 +101,16 @@ const initialSettings: Settings = {
 const initialSettingsSummary: SettingsSummary = {
   loading: true,
   error: "",
-  oinkPool: "Loading…",
-  degenPool: "Loading…",
-  minOink: "Loading…",
-  minDegen: "Loading…",
-  fee: "Loading…",
+  oinkPool: "—",
+  degenPool: "—",
+  minOink: "—",
+  minDegen: "—",
+  fee: "—",
 };
 const poolSummary = (token: RewardToken, address: unknown) => {
   const rawAddress = String(address || "");
   if (!rawAddress || rawAddress === ZeroAddress) {
-    return token === "OINK"
-      ? "OINK — 5 Year (contract default)"
-      : "DEGEN — 10 Year (contract default)";
+    return `${token} — Contract default`;
   }
   const pool = SETTINGS_POOLS[token].find(
     (item) => item.address.toLowerCase() === rawAddress.toLowerCase(),
@@ -126,21 +142,23 @@ export function RewardsActions({
   dashboard?: boolean;
 }) {
   const [action, setAction] = useState<Action>(null);
+  const submissionLock = useRef(false);
+  const pageActive = usePageActive();
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [refreshedAt, setRefreshedAt] = useState(() => new Date());
   const [settingsRevision, setSettingsRevision] = useState(0);
   const [settingsSummary, setSettingsSummary] =
     useState<SettingsSummary>(initialSettingsSummary);
   useEffect(() => {
-    if (!dashboard || !wallet.address) return;
+    if (!dashboard || !wallet.address || !pageActive) return;
     let cancelled = false;
-    setSettingsSummary((current) => ({ ...current, loading: true }));
-    void (async () => {
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      if (document.hidden) { timer = setTimeout(() => void poll(), 60_000); return; }
       try {
-        const { nft } = await getPublicContracts();
-        const raw = await nft.userSettings(wallet.address);
+        const { provider } = await getPublicContracts();
+        const nft = new Contract(CONTRACTS.nft, NFT_ACTION_ABI, provider);
+        const [raw, defaultFee] = await Promise.all([nft.userSettings(wallet.address), nft.defaultFee()]);
         if (cancelled) return;
         setSettingsSummary({
           loading: false,
@@ -149,41 +167,24 @@ export function RewardsActions({
           degenPool: poolSummary("DEGEN", raw.defaultHarvest2),
           minOink: settingAmount(raw.minimumHarvest1),
           minDegen: settingAmount(raw.minimumHarvest2),
-          fee:
-            Number(raw.fee) > 0
-              ? `${(Number(raw.fee) / 100).toFixed(2)}%`
-              : "Contract default (1%)",
+          fee: raw.fee === 1n ? "0%" : raw.fee === 0n ? `${Number(defaultFee) / 100}% (default)` : `${Number(raw.fee) / 100}%`,
         });
       } catch (error) {
         if (cancelled) return;
-        setSettingsSummary({
-          ...initialSettingsSummary,
-          loading: false,
-          error: readableError(error),
-          oinkPool: "Unavailable",
-          degenPool: "Unavailable",
-          minOink: "Unavailable",
-          minDegen: "Unavailable",
-          fee: "Unavailable",
-        });
+        setSettingsSummary(current => ({ ...current, loading: false, error: readableError(error) }));
+      } finally {
+        if (!cancelled) timer = setTimeout(() => void poll(), 60_000);
       }
-    })();
+    };
+    void poll();
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
-  }, [dashboard, wallet.address, settingsRevision]);
+  }, [dashboard, wallet.address, settingsRevision, pageActive]);
   const complete = async () => {
-    await onComplete();
+    await onComplete().catch(() => undefined);
     setSettingsRevision((current) => current + 1);
-    setRefreshedAt(new Date());
-  };
-  const refresh = async () => {
-    try {
-      setRefreshing(true);
-      await complete();
-    } finally {
-      setRefreshing(false);
-    }
   };
   const close = () => {
     if (!busy) {
@@ -197,7 +198,7 @@ export function RewardsActions({
         <>
           <div className="rewards-dashboard-actions">
             <button
-              disabled={balance === 0n}
+              disabled={pendingOink <= 0n && pendingDegen <= 0n}
               onClick={() => setAction("harvest")}
             >
               Manual Harvest
@@ -212,20 +213,8 @@ export function RewardsActions({
           </div>
           <div className="rewards-dashboard-footer">
             <span>
-              Rewards auto-distribute every ~50 min. Manual harvest claims your
-              pending balance now.
+              Choose a destination to claim pending rewards. Shorter pools and wallet payouts can reduce the amount received.
             </span>
-            <div>
-              <time dateTime={refreshedAt.toISOString()}>
-                {refreshedAt.toLocaleTimeString()}
-              </time>
-              <button
-                disabled={refreshing}
-                onClick={() => void refresh()}
-              >
-                {refreshing ? "Refreshing…" : "↻ Refresh"}
-              </button>
-            </div>
           </div>
           <section className="rewards-settings-summary">
             <header>
@@ -265,7 +254,7 @@ export function RewardsActions({
             </button>
             {settingsSummary.error && (
               <p className="settings-summary-error">
-                Settings temporarily unavailable. Refresh to try again.
+                Settings temporarily unavailable.
               </p>
             )}
           </section>
@@ -286,6 +275,7 @@ export function RewardsActions({
       {action === "harvest" && (
         <HarvestDialog
           wallet={wallet}
+          submissionLock={submissionLock}
           pendingOink={pendingOink}
           pendingDegen={pendingDegen}
           busy={busy}
@@ -299,6 +289,7 @@ export function RewardsActions({
       {action === "settings" && (
         <SettingsDialog
           wallet={wallet}
+          submissionLock={submissionLock}
           busy={busy}
           setBusy={setBusy}
           status={status}
@@ -310,6 +301,7 @@ export function RewardsActions({
       {action === "burn" && (
         <BurnDialog
           wallet={wallet}
+          submissionLock={submissionLock}
           balance={balance}
           busy={busy}
           setBusy={setBusy}
@@ -325,6 +317,7 @@ export function RewardsActions({
 
 type Shared = {
   wallet: WalletState;
+  submissionLock: { current: boolean };
   busy: boolean;
   setBusy: (value: boolean) => void;
   status: string;
@@ -348,7 +341,7 @@ function Modal({
 }) {
   return (
     <div
-      className="modal-backdrop"
+      className="modal-backdrop nft-action-backdrop"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) close();
@@ -357,7 +350,7 @@ function Modal({
       <section
         className={`action-modal ${className}`.trim()}
         role="dialog"
-        aria-modal="true"
+        aria-modal="false"
         aria-label={title}
       >
         <header>
@@ -377,6 +370,7 @@ function Modal({
 
 function HarvestDialog({
   wallet,
+  submissionLock,
   pendingOink,
   pendingDegen,
   busy,
@@ -387,17 +381,38 @@ function HarvestDialog({
   onComplete,
 }: Shared & { pendingOink: bigint; pendingDegen: bigint }) {
   const [token, setToken] = useState<RewardToken>("OINK");
+  const [minimums, setMinimums] = useState<{ OINK: bigint; DEGEN: bigint } | null>(null);
+  const [rules, setRules] = useState<Record<string, HarvestRule>>({});
+  useEffect(() => {
+    let active = true;
+    setRules({});
+    void getPublicContracts().then(async ({ provider }) => {
+      const contract = new Contract(CONTRACTS.nft, NFT_ACTION_ABI, provider);
+      const values = await Promise.allSettled(HARVEST_DESTINATIONS[token].map(async choice => {
+        const key = choice.address || "WALLET";
+        return [key, await readHarvestRule(contract, token, key)] as const;
+      }));
+      if (active) setRules(Object.fromEntries(values.flatMap(value => value.status === "fulfilled" ? [value.value] : [])));
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [token]);
+  useEffect(() => {
+    let active = true;
+    void getPublicContracts().then(async ({ nft }) => {
+      const [OINK, DEGEN] = await Promise.all([nft.defaultMinHarvestOink(), nft.defaultMinHarvestDegen()]);
+      if (active) setMinimums({ OINK, DEGEN });
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [wallet.address]);
   const max = token === "OINK" ? pendingOink : pendingDegen;
   const [amount, setAmount] = useState(() => harvestInput(pendingOink));
   const [destination, setDestination] = useState(
     HARVEST_DESTINATIONS.OINK[0].address!,
   );
   const choices = HARVEST_DESTINATIONS[token];
-  const option =
-    choices.find(
-      (item) => (item.address || "WALLET") === destination,
-    ) || choices[0];
-  const amountNumber = Number(amount.replace(/[, ]/g, "")) || 0;
+  let amountRaw = 0n;
+  try { amountRaw = parseEther(amount.replace(/[, ]/g, "")); } catch { /* Incomplete input has no estimate. */ }
+  const selectedRule = rules[destination];
   const chooseToken = (nextToken: RewardToken) => {
     const nextMax = nextToken === "OINK" ? pendingOink : pendingDegen;
     setToken(nextToken);
@@ -407,27 +422,44 @@ function HarvestDialog({
     );
   };
   const submit = async () => {
+    if (submissionLock.current) return;
+    submissionLock.current = true;
     try {
       setBusy(true);
-      setStatus("Confirm the harvest in your wallet…");
+      setStatus("");
       const amountWei = parseEther(amount.replace(/,/g, ""));
       if (amountWei <= 0n || amountWei > max)
         throw new Error(`Enter an amount up to ${display(max)} ${token}.`);
       const signer = await wallet.getSigner();
-      const contract = new Contract(CONTRACTS.nft, NFT_ABI, signer);
+      const contract = new Contract(CONTRACTS.nft, NFT_ACTION_ABI, signer);
+      if (!choices.some(item => (item.address || "WALLET") === destination)) throw new Error("Choose a supported destination.");
       const target = destination === "WALLET" ? wallet.address! : destination;
+      const freshRule = await readHarvestRule(contract, token, destination);
+      const listedRule = rules[destination];
+      if (freshRule.bps <= 0n || freshRule.bps > 10000n) throw new Error("This harvest destination is unavailable.");
+      if (!listedRule || listedRule.bps !== freshRule.bps || listedRule.minServe !== freshRule.minServe) {
+        setRules(current => ({ ...current, [destination]: freshRule }));
+        throw new Error("Destination terms changed. Check the updated payout and choose Harvest again.");
+      }
+      const pending = await contract.viewUserTotalEarnings(await signer.getAddress());
+      const currentMax: bigint = token === "OINK" ? pending[0] : pending[1];
+      if (amountWei > currentMax) throw new Error("Pending rewards changed. Enter an amount within your current balance.");
+      await contract.selfHarvest.staticCall(amountWei, target, token === "OINK");
+      await checkNetworkFee(signer, await contract.selfHarvest.estimateGas(amountWei, target, token === "OINK"));
+      await wallet.getSigner();
       const tx = await contract.selfHarvest(
         amountWei,
         target,
         token === "OINK",
       );
-      setStatus("Transaction submitted. Waiting for confirmation…");
-      await tx.wait();
-      setStatus(`Harvest confirmed: ${tx.hash.slice(0, 10)}…`);
+      setStatus("");
+      await confirmTransaction(tx);
+      setStatus("");
       await onComplete();
     } catch (error) {
       setStatus(readableError(error));
     } finally {
+      submissionLock.current = false;
       setBusy(false);
     }
   };
@@ -471,7 +503,10 @@ function HarvestDialog({
           onChange={(event) => setAmount(event.target.value)}
         />
       </label>
-      <div className="modal-section-label">Harvest Into…</div>
+      <button type="button" className="amount-max" disabled={busy} onClick={() => setAmount(harvestInput(max))}>Max</button>
+      <small className="form-hint">Max fills the last available pending balance. The current balance is checked before claiming.</small>
+      {minimums && <p className="form-hint">Automatic harvest minimum: {display(minimums[token])} {token} <HelpTip label="automatic harvest minimum">The contract default threshold applies to automated harvesting; your saved settings may override it. A manual claim is checked against the current contract rules before your wallet opens.</HelpTip></p>}
+      <div className="modal-section-label">Harvest Into… · Current payout comparison</div>
       <div className="destination-list">
         {choices.map((item) => (
           <label
@@ -488,19 +523,13 @@ function HarvestDialog({
             <span>
               <b>{item.label}</b>
               <small>
-                {item.payoutPct === 100
-                  ? `Receive 100% (${compactDisplay(amountNumber)})`
-                  : `-${100 - item.payoutPct}% Penalty (${compactDisplay(
-                      (amountNumber * item.payoutPct) / 100,
-                    )})`}
+                {rules[item.address || "WALLET"] ? <>{display(amountRaw * rules[item.address || "WALLET"].bps / 10000n)} {token} · {100 - Number(rules[item.address || "WALLET"].bps) / 100}% penalty{rules[item.address || "WALLET"].minServe > 0n ? ` · at least ${Number(rules[item.address || "WALLET"].minServe) / 86400} days` : ""}</> : "Payout quote unavailable"}
               </small>
             </span>
           </label>
         ))}
       </div>
-      <span className="sr-only">
-        Selected payout: {option.payoutPct} percent
-      </span>
+      <p className="form-hint">Expected payout: {selectedRule ? `${display(amountRaw * selectedRule.bps / 10000n)} ${token}` : "Unavailable"} <HelpTip label="claim destination penalties">Amounts use the NFT contract's current payout basis points and minimum lock period. Manual harvesting does not charge the automatic harvesting fee. Terms and eligibility are checked again before your wallet opens.</HelpTip></p>
       <ActionFooter
         busy={busy}
         status={status}
@@ -514,6 +543,7 @@ function HarvestDialog({
 
 function SettingsDialog({
   wallet,
+  submissionLock,
   busy,
   setBusy,
   status,
@@ -523,9 +553,6 @@ function SettingsDialog({
 }: Shared) {
   const [settings, setSettings] = useState<Settings>(initialSettings);
   const [defaults, setDefaults] = useState({ oink: "0", degen: "0" });
-  const [showCompounded, setShowCompounded] = useState(
-    () => localStorage.getItem("degen-compounded") !== "false",
-  );
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let cancelled = false;
@@ -542,28 +569,10 @@ function SettingsDialog({
         const defaultDegen = formatEther(defDegen);
         setDefaults({ oink: defaultOink, degen: defaultDegen });
         setSettings({
-          oinkPool:
-            raw.defaultHarvest1 === ZeroAddress
-              ? initialSettings.oinkPool
-              : canonicalPool(
-                  "OINK",
-                  raw.defaultHarvest1,
-                  initialSettings.oinkPool,
-                ),
-          degenPool:
-            raw.defaultHarvest2 === ZeroAddress
-              ? initialSettings.degenPool
-              : canonicalPool(
-                  "DEGEN",
-                  raw.defaultHarvest2,
-                  initialSettings.degenPool,
-                ),
-          minOink: formatEther(
-            raw.minimumHarvest1 > 0n ? raw.minimumHarvest1 : defOink,
-          ),
-          minDegen: formatEther(
-            raw.minimumHarvest2 > 0n ? raw.minimumHarvest2 : defDegen,
-          ),
+          oinkPool: String(raw.defaultHarvest1),
+          degenPool: String(raw.defaultHarvest2),
+          minOink: formatEther(raw.minimumHarvest1),
+          minDegen: formatEther(raw.minimumHarvest2),
           fee: Number(raw.fee) > 0 ? (Number(raw.fee) / 100).toString() : "0",
         });
       } catch (error) {
@@ -577,37 +586,39 @@ function SettingsDialog({
     };
   }, [wallet.address, setStatus]);
   const submit = async () => {
+    if (submissionLock.current) return;
+    submissionLock.current = true;
     try {
       setBusy(true);
-      setStatus("Confirm the settings transaction in your wallet…");
-      const fee = Number(settings.fee);
-      if (!Number.isFinite(fee) || fee < 0)
-        throw new Error("Enter a valid fee.");
-      if (fee > 0 && fee < 1)
-        throw new Error(
-          "The protocol minimum fee is 1%. Use 0 for the contract default.",
-        );
-      localStorage.setItem(
-        "degen-compounded",
-        showCompounded ? "true" : "false",
-      );
-      window.dispatchEvent(new Event("degen-compounded-change"));
+      setStatus("");
+      const feeBps = parseNftFee(settings.fee);
       const signer = await wallet.getSigner();
-      const contract = new Contract(CONTRACTS.nft, NFT_ABI, signer);
+      const contract = new Contract(CONTRACTS.nft, NFT_ACTION_ABI, signer);
+      for (const [token, destination] of [["OINK", settings.oinkPool], ["DEGEN", settings.degenPool]] as const) {
+        if (destination === ZeroAddress) continue;
+        const rule = await readHarvestRule(contract, token, destination);
+        if (rule.bps <= 0n || rule.bps > 10000n) throw new Error("Choose supported harvest pools.");
+      }
+      const minOink = parseEther(settings.minOink || "0"), minDegen = parseEther(settings.minDegen || "0");
+      if (minOink < 0n || minDegen < 0n) throw new Error("Minimum harvest amounts cannot be negative.");
+      await contract.setUserSettings.staticCall(settings.oinkPool, settings.degenPool, minOink, minDegen, feeBps);
+      await checkNetworkFee(signer, await contract.setUserSettings.estimateGas(settings.oinkPool, settings.degenPool, minOink, minDegen, feeBps));
+      await wallet.getSigner();
       const tx = await contract.setUserSettings(
         settings.oinkPool,
         settings.degenPool,
         parseEther(settings.minOink || "0"),
         parseEther(settings.minDegen || "0"),
-        BigInt(Math.round(fee * 100)),
+        feeBps,
       );
-      setStatus("Transaction submitted. Waiting for confirmation…");
-      await tx.wait();
-      setStatus(`Settings saved: ${tx.hash.slice(0, 10)}…`);
+      setStatus("");
+      await confirmTransaction(tx);
+      setStatus("");
       await onComplete();
     } catch (error) {
       setStatus(readableError(error));
     } finally {
+      submissionLock.current = false;
       setBusy(false);
     }
   };
@@ -624,29 +635,14 @@ function SettingsDialog({
         <p>Loading your on-chain settings…</p>
       ) : (
         <div className="settings-grid">
-          <label className="settings-checkbox-row">
-            <span>
-              <input
-                type="checkbox"
-                checked={showCompounded}
-                onChange={(event) =>
-                  setShowCompounded(event.target.checked)
-                }
-              />
-              <b>Show Mining Rewards (compounded)</b>
-            </span>
-            <small>
-              When on, reward counters show earnings accumulating between
-              auto-harvest cycles. When off, they show only the confirmed
-              on-chain snapshot.
-            </small>
-          </label>
           <label>
             OINK Harvest
             <select
               value={settings.oinkPool}
               onChange={(e) => field("oinkPool", e.target.value)}
             >
+              <option value={ZeroAddress}>Contract default</option>
+              {settings.oinkPool !== ZeroAddress && !SETTINGS_POOLS.OINK.some(item => item.address.toLowerCase() === settings.oinkPool.toLowerCase()) && <option value={settings.oinkPool}>Current pool · {shortAddress(settings.oinkPool)}</option>}
               {SETTINGS_POOLS.OINK.map((item) => (
                 <option value={item.address} key={item.address}>
                   {item.label}
@@ -654,8 +650,7 @@ function SettingsDialog({
               ))}
             </select>
             <small>
-              Pool your OINK rewards are auto-staked into. Longer locks
-              provide higher APY.
+              Destination for automatically harvested OINK rewards.
             </small>
           </label>
           <label>
@@ -664,6 +659,8 @@ function SettingsDialog({
               value={settings.degenPool}
               onChange={(e) => field("degenPool", e.target.value)}
             >
+              <option value={ZeroAddress}>Contract default</option>
+              {settings.degenPool !== ZeroAddress && !SETTINGS_POOLS.DEGEN.some(item => item.address.toLowerCase() === settings.degenPool.toLowerCase()) && <option value={settings.degenPool}>Current pool · {shortAddress(settings.degenPool)}</option>}
               {SETTINGS_POOLS.DEGEN.map((item) => (
                 <option value={item.address} key={item.address}>
                   {item.label}
@@ -682,8 +679,7 @@ function SettingsDialog({
               onChange={(e) => field("minOink", e.target.value)}
             />
             <small>
-              Protocol default: {defaults.oink} · Minimum pending OINK before
-              auto-harvest.
+              Enter 0 for the contract default ({defaults.oink} OINK). Threshold for automatic harvests.
             </small>
           </label>
           <label>
@@ -694,20 +690,18 @@ function SettingsDialog({
               onChange={(e) => field("minDegen", e.target.value)}
             />
             <small>
-              Protocol default: {defaults.degen} · Minimum pending DEGEN before
-              auto-harvest.
+              Enter 0 for the contract default ({defaults.degen} DEGEN). Threshold for automatic harvests.
             </small>
           </label>
           <label>
-            Harvest fee (%)
+            Automatic harvest fee (%)
             <input
               inputMode="decimal"
               value={settings.fee}
               onChange={(e) => field("fee", e.target.value)}
             />
             <small>
-              Protocol minimum is 1%. Enter 0 to use the default; a higher fee
-              donates the difference to the treasury.
+              Maximum 25%. Enter 0 for the contract default, or 0.01 to disable the automatic fee. Manual harvests have no automatic harvest fee.
             </small>
           </label>
         </div>
@@ -725,6 +719,7 @@ function SettingsDialog({
 
 function BurnDialog({
   wallet,
+  submissionLock,
   balance,
   busy,
   setBusy,
@@ -738,10 +733,16 @@ function BurnDialog({
     BURN_DESTINATIONS.DEGEN[0].address!,
   );
   const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [recordLimit, setRecordLimit] = useState(20);
+  const [moreRecords, setMoreRecords] = useState(false);
+  const [payouts, setPayouts] = useState<Record<string, bigint>>({});
+  const [burnPenalties, setBurnPenalties] = useState<Record<string, bigint>>({});
+  const [purchaseRevision, setPurchaseRevision] = useState(0);
   const [purchaseId, setPurchaseId] = useState(0);
   const [preview, setPreview] = useState<bigint | null>(null);
-  const [confirmed, setConfirmed] = useState(false);
+
   const selected = purchases.find((item) => item.id === purchaseId);
+  const burnAmount = selected ? (balance < selected.amount ? balance : selected.amount) : 0n;
   useEffect(() => {
     setDestination(BURN_DESTINATIONS[token][0].address!);
     setPreview(null);
@@ -752,23 +753,25 @@ function BurnDialog({
       try {
         const { mint } = await getPublicContracts();
         const found: Purchase[] = [];
-        for (let i = 0; i < 50; i++) {
-          try {
-            const raw = await mint.userPurchases(wallet.address, i);
-            if (raw.amount === 0n) break;
-            found.push({
-              id: i,
-              amount: raw.amount,
-              amountPaid: raw.amountPaid,
-              tokenPaid: String(raw.tokenPaid),
-            });
-          } catch {
-            break;
+        let lastExists = false;
+        for (let start = 0; start < recordLimit; start += 5) {
+          const results = await Promise.allSettled(Array.from({ length: Math.min(5, recordLimit - start) }, (_, offset) => mint.userPurchases(wallet.address, start + offset)));
+          for (const [offset, result] of results.entries()) {
+            if (result.status === "rejected") {
+              const failure = result.reason as { code?: string };
+              // A successful earlier page can end at the contract's array boundary.
+              if (failure.code !== "CALL_EXCEPTION") throw result.reason;
+              continue;
+            }
+            const raw = result.value;
+            lastExists = start + offset === recordLimit - 1;
+            if (raw.amount > 0n) found.push({ id: start + offset, amount: raw.amount, amountPaid: raw.amountPaid, tokenPaid: String(raw.tokenPaid) });
           }
         }
         if (!cancelled) {
           setPurchases(found);
-          setPurchaseId(found[0]?.id || 0);
+          setPurchaseId(current => found.some(item => item.id === current) ? current : found[0]?.id || 0);
+          setMoreRecords(lastExists);
         }
       } catch (error) {
         if (!cancelled) setStatus(readableError(error));
@@ -777,21 +780,33 @@ function BurnDialog({
     return () => {
       cancelled = true;
     };
-  }, [wallet.address, setStatus]);
+  }, [wallet.address, setStatus, recordLimit, purchaseRevision]);
   useEffect(() => {
     if (!selected || !wallet.address) return;
     let cancelled = false;
+    setPayouts({});
+    setPreview(null);
     void (async () => {
       try {
-        const { mint } = await getPublicContracts();
-        const target = destination === "WALLET" ? wallet.address : destination;
-        const result = await mint.previewBurnReturn(
-          selected.id,
-          balance,
-          token === "OINK",
-          target,
-        );
-        if (!cancelled) setPreview(result);
+        const { provider } = await getPublicContracts();
+        const mint = new Contract(CONTRACTS.mint, MINT_ACTION_ABI, provider);
+        const rates = await mint.getPricesInInputToken(selected.tokenPaid);
+        const payment = burnPayment(selected, burnAmount);
+        const rate: bigint = token === "OINK" ? rates[0] : rates[1];
+        const results = await Promise.allSettled(BURN_DESTINATIONS[token].filter(choice => choice.address).map(async choice => {
+          const target = choice.address!;
+          const [, payoutPct] = await Promise.all([
+            mint.previewBurnReturn(selected.id, burnAmount, token === "OINK", target, { from: wallet.address }),
+            mint.penalty(target) as Promise<bigint>,
+          ]);
+          if (payoutPct <= 0n || payoutPct > 100n) throw new Error("Invalid payout percentage");
+          return [target, { payout: (rate * payment / 10n ** 18n) * payoutPct / 100n, payoutPct }] as const;
+        }));
+        if (!cancelled) {
+          const entries = results.flatMap(result => result.status === "fulfilled" ? [result.value] : []);
+          setPayouts(Object.fromEntries(entries.map(([key, value]) => [key, value.payout])));
+          setBurnPenalties(Object.fromEntries(entries.map(([key, value]) => [key, value.payoutPct])));
+        }
       } catch {
         if (!cancelled) setPreview(null);
       }
@@ -799,39 +814,60 @@ function BurnDialog({
     return () => {
       cancelled = true;
     };
-  }, [selected, destination, token, balance, wallet.address]);
+  }, [selected, token, burnAmount, wallet.address]);
+  useEffect(() => { setPreview(payouts[destination] ?? null); }, [payouts, destination]);
   const submit = async () => {
-    if (!confirmed) return;
+    if (submissionLock.current) return;
+    submissionLock.current = true;
     try {
       setBusy(true);
-      setStatus("Confirm the permanent NFT burn in your wallet…");
+      setStatus("");
       if (!selected)
         throw new Error("No purchase record was found for this wallet.");
       const signer = await wallet.getSigner();
-      const contract = new Contract(CONTRACTS.mint, MINT_ABI, signer);
+      const contract = new Contract(CONTRACTS.mint, MINT_ACTION_ABI, signer);
       const target = destination === "WALLET" ? wallet.address! : destination;
+      if (!BURN_DESTINATIONS[token].some(item => (item.address || "WALLET") === destination)) throw new Error("Choose a supported destination.");
+      const nft = new Contract(CONTRACTS.nft, NFT_ABI, signer);
+      const [currentBalance, purchase, rates, payoutPct] = await Promise.all([
+        nft.balanceOf(await signer.getAddress(), NFT_TOKEN_ID),
+        contract.userPurchases(await signer.getAddress(), selected.id),
+        contract.getPricesInInputToken(selected.tokenPaid),
+        contract.penalty(target) as Promise<bigint>,
+      ]);
+      if (burnAmount <= 0n || currentBalance < burnAmount || purchase.amount !== selected.amount || purchase.amountPaid !== selected.amountPaid || String(purchase.tokenPaid).toLowerCase() !== selected.tokenPaid.toLowerCase()) throw new Error("Your NFT balance or purchase record changed. Choose the action again.");
+      const rate: bigint = token === "OINK" ? rates[0] : rates[1];
+      const freshPreview = (rate * burnPayment(selected, burnAmount) / 10n ** 18n) * payoutPct / 100n;
+      if (preview === null || freshPreview !== preview) {
+        setPreview(freshPreview);
+        throw new Error("The return changed. Check the updated estimate and choose Burn again.");
+      }
+      await contract.burnNFT.staticCall(selected.id, token === "OINK", burnAmount, target);
+      await checkNetworkFee(signer, await contract.burnNFT.estimateGas(selected.id, token === "OINK", burnAmount, target));
+      await wallet.getSigner();
       const tx = await contract.burnNFT(
         selected.id,
         token === "OINK",
-        balance,
+        burnAmount,
         target,
       );
-      setStatus("Burn submitted. Waiting for confirmation…");
-      await tx.wait();
-      setStatus(`Burn confirmed: ${tx.hash.slice(0, 10)}…`);
+      setStatus("");
+      await confirmTransaction(tx);
+      setStatus("");
+      setPurchaseRevision(current => current + 1);
       await onComplete();
     } catch (error) {
       setStatus(readableError(error));
     } finally {
+      submissionLock.current = false;
       setBusy(false);
     }
   };
-  const choices = BURN_DESTINATIONS[token];
+  const choices = BURN_DESTINATIONS[token].filter(choice => choice.address);
   return (
     <Modal title="Burn / Cash Out NFT Miners" close={close}>
       <p className="destructive-copy">
-        Burning permanently destroys all {balance.toString()} NFT miner
-        {balance === 1n ? "" : "s"} held by this wallet. This cannot be undone.
+        {selected ? `Burning permanently destroys ${burnAmount.toString()} NFT miner${burnAmount === 1n ? "" : "s"} from the selected purchase record. This cannot be undone.` : "Choose an available purchase record to view the burn amount and expected return."}
       </p>
       {purchases.length > 1 && (
         <label className="field-label">
@@ -848,6 +884,7 @@ function BurnDialog({
           </select>
         </label>
       )}
+      {moreRecords && <button type="button" disabled={busy} onClick={() => setRecordLimit(limit => limit + 20)}>Show more purchase records</button>}
       <div className="token-switch">
         <button
           className={token === "DEGEN" ? "active" : ""}
@@ -877,7 +914,7 @@ function BurnDialog({
             />
             <span>
               <b>{item.label}</b>
-              <small>Receive {item.payoutPct}%</small>
+              <small>{payouts[item.address!] !== undefined ? `${display(payouts[item.address!])} ${token} · ${100 - Number(burnPenalties[item.address!])}% penalty` : "Payout quote unavailable"}</small>
             </span>
           </label>
         ))}
@@ -896,23 +933,12 @@ function BurnDialog({
             : choices.find((item) => item.address === destination)?.label}
         </small>
       </div>
-      <label className="burn-confirm">
-        <input
-          type="checkbox"
-          checked={confirmed}
-          onChange={(e) => setConfirmed(e.target.checked)}
-        />
-        <span>
-          I understand this permanently burns every NFT miner currently held by
-          this wallet.
-        </span>
-      </label>
       <ActionFooter
-        busy={busy || !confirmed || !selected}
+        busy={busy || !selected || preview === null || burnAmount === 0n}
         status={status}
         close={close}
         submit={() => void submit()}
-        label="Permanently Burn NFTs"
+        label={`Burn ${burnAmount.toString()} NFT${burnAmount === 1n ? "" : "s"}`}
         danger
       />
     </Modal>

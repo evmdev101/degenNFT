@@ -1,0 +1,157 @@
+.miner-withdrawal {
+  width: 100%;
+  min-width: 0;
+  margin-top: 22px;
+  padding: 16px 0 0;
+  border-top: 1px solid var(--border);
+  color: var(--fg);
+  text-align: left;
+  font: 500 14px/1.5 "DM Sans", sans-serif;
+}
+.miner-withdrawal-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.miner-withdrawal-heading h3 { margin: 0; font: 700 14px/1.4 "DM Sans", sans-serif; color: var(--fg); letter-spacing: 0; text-transform: none; }
+.miner-withdrawal-badge {
+  padding: 4px 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 600;
+}
+.miner-withdrawal p { margin: 10px 0; font: inherit; color: color-mix(in srgb, var(--fg) 82%, var(--panel)); }
+.miner-withdrawal summary { width: fit-content; padding: 6px 0; color: var(--fg); cursor: pointer; font-size: 13px; }
+.miner-withdrawal-details { margin-top: 6px; padding: 2px 12px; border-left: 2px solid var(--border); }
+.miner-withdrawal-details p { font-size: 13px; }
+.mc-card .mc-actions-wrap { margin-top: 14px; text-align: left; }
+.mc-card .mc-actions-btn {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 46px; padding: 12px 14px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  font: 700 14px/1.4 "DM Sans", sans-serif; letter-spacing: 0; text-transform: none;
+}
+.mc-card .mc-actions-btn[aria-expanded="true"] { border-color: var(--accent); }
+.mc-card .mc-actions-menu { position: static; margin-top: 8px; box-shadow: none; border-radius: 8px; }
+.mc-card .mc-actions-menu[hidden] { display: none; }
+.mc-card .mc-actions-menu button { padding: 12px 14px; font: 500 14px/1.4 "DM Sans", sans-serif; text-transform: none; letter-spacing: 0; }
+.mc-card .mc-actions-menu strong { display: block; font-weight: 700; }
+.mc-card .mc-actions-menu button > span { display: block; margin-top: 3px; font-size: 12px; color: color-mix(in srgb, var(--fg) 75%, var(--panel)); }
+.miner-withdrawal summary:focus-visible, .mc-card .mc-actions-wrap button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* Match OINK's miner portfolio: plain surfaces, DM Sans and a roomy card grid. */
+.miners-hub-tabs button { font-family: "DM Sans", sans-serif; font-weight: 700; letter-spacing: 0; opacity: 1; }
+.degen-miner-portfolio { font-family: "DM Sans", sans-serif; }
+.degen-miner-portfolio .miners-summary-row {
+  margin: 0 0 28px; padding: 16px 0; border: 1px solid var(--border);
+  border-radius: 12px; background: var(--panel);
+}
+.degen-miner-portfolio .miners-summary-col { min-height: 100px; padding: 2px 22px; border-left-color: var(--border); }
+.degen-miner-portfolio .miners-summary-col-label { font: 500 14px/1.6 "DM Sans", sans-serif; letter-spacing: 0; color: var(--fg); margin-bottom: 10px; }
+.degen-miner-portfolio .miners-summary-col-val {
+  display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+  font-family: "DM Sans", sans-serif; color: var(--fg); white-space: normal;
+  overflow: visible; text-overflow: clip;
+}
+.degen-miner-portfolio .miners-summary-col-val > strong { font: 700 26px/1.35 "DM Sans", sans-serif; overflow-wrap: anywhere; }
+.degen-miner-portfolio .miner-summary-token { display: inline-flex; align-items: center; gap: 5px; font-size: 14px; }
+.degen-miner-portfolio .miner-summary-token img { width: 20px; height: 20px; object-fit: contain; }
+.degen-miner-portfolio .miners-summary-usd { flex-basis: 100%; font: 500 13px/1.5 "DM Sans", sans-serif; color: color-mix(in srgb, var(--fg) 72%, var(--panel)); }
+.degen-miner-portfolio .rw-miners-section { margin-top: 28px; }
+.degen-miner-portfolio .rw-miners-header { align-items: center; gap: 16px; margin-bottom: 18px; }
+.degen-miner-portfolio .rw-miners-title { margin: 0 0 6px; font: 700 32px/1.25 "DM Sans", sans-serif; letter-spacing: 0; }
+.degen-miner-portfolio .rw-miners-title small { font: 500 14px/1.6 "DM Sans", sans-serif; color: color-mix(in srgb, var(--fg) 72%, var(--panel)); letter-spacing: 0; }
+.degen-miner-portfolio .rw-miners-sub { font: 500 14px/1.6 "DM Sans", sans-serif; color: var(--fg); opacity: 1; letter-spacing: 0; }
+.degen-miner-portfolio .rw-view-toggle { gap: 6px; }
+.degen-miner-portfolio .rw-view-btn {
+  width: auto; height: auto; min-height: 44px; padding: 8px 12px; opacity: 1;
+  font: 500 15px/1.4 "DM Sans", sans-serif; background: var(--panel); border-color: var(--border);
+}
+.degen-miner-portfolio .rw-view-btn.active { border-color: var(--accent); color: var(--accent); background: var(--panel); }
+.degen-miner-portfolio .miners-toolbar {
+  display: grid; grid-template-columns: minmax(200px, 1fr) minmax(140px, 170px) minmax(190px, 230px) minmax(160px, 200px) auto;
+  align-items: end; gap: 10px; margin-bottom: 22px;
+}
+.degen-miner-portfolio .miners-toolbar label { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin: 0; padding: 0; font: 500 15px/1.5 "DM Sans", sans-serif; }
+.degen-miner-portfolio .miners-toolbar :is(input, select) {
+  width: 100%; min-width: 0; min-height: 46px; padding: 9px 10px;
+  border: 1px solid var(--border); border-radius: 6px; background: transparent;
+  color: var(--fg); font: 500 16px/24px "DM Sans", sans-serif;
+}
+.degen-miner-portfolio .miners-toolbar input::placeholder { color: color-mix(in srgb, var(--fg) 65%, var(--panel)); }
+.degen-miner-portfolio .miners-toolbar option { background: var(--panel); color: var(--fg); }
+.degen-miner-portfolio :is(.miners-toolbar > button, .miner-deadline-shortcuts button, .miners-empty button) {
+  min-height: 44px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 6px;
+  background: transparent; color: var(--fg); font: 500 15px/1.5 "DM Sans", sans-serif; cursor: pointer;
+}
+.degen-miner-portfolio .miner-deadline-shortcuts { display: flex; flex-wrap: wrap; gap: 8px; margin: -6px 0 22px; }
+.degen-miner-portfolio .miner-read-status { min-height: 3em; margin: 0 0 16px; font: 500 14px/1.5 "DM Sans", sans-serif; }
+.degen-miner-portfolio .miner-deadline-shortcuts strong { margin-left: 10px; font-variant-numeric: tabular-nums; }
+.degen-miner-portfolio .miner-deadline-shortcuts [aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--panel)); }
+.degen-miner-portfolio .miner-deadline-shortcuts button:disabled { opacity: .5; cursor: default; }
+.degen-miner-portfolio :is(.miners-toolbar, .miner-deadline-shortcuts) :is(button, input, select):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.degen-miner-portfolio #rwMinersGrid { min-height: 520px; padding: 3px; }
+.degen-miner-portfolio .rw-miners-grid { gap: 24px; align-items: start; }
+.degen-miner-portfolio .mc-card,
+.degen-miner-portfolio .mc-card.mc-ready {
+  min-width: 0; min-height: 0; padding: 34px 30px 24px;
+  border: 1px solid var(--border); border-radius: 20px;
+  background: var(--panel); box-shadow: none; font-family: "DM Sans", sans-serif;
+}
+.degen-miner-portfolio .mc-card-toprow { margin: 0; gap: 12px; }
+.degen-miner-portfolio .mc-card-dur { margin: 12px 0; font: 700 24px/1.3 "DM Sans", sans-serif; letter-spacing: 0; color: var(--fg); opacity: 1; }
+.degen-miner-portfolio .mc-card-num { font: 500 14px/1.6 "DM Sans", sans-serif; color: var(--fg); opacity: 1; letter-spacing: 0; }
+.degen-miner-portfolio .mc-card-hero { width: 100%; min-height: 162px; display: flex; flex-direction: column; justify-content: center; gap: 7px; padding: 26px 0 38px; }
+.degen-miner-portfolio .mc-card-amount {
+  margin: 0; font: 700 clamp(32px, 3vw, 48px)/1.2 "DM Sans", sans-serif;
+  color: var(--accent); white-space: normal; overflow: visible; overflow-wrap: anywhere; text-overflow: clip; filter: none;
+}
+.degen-miner-portfolio .mc-card-amount-long { font-size: clamp(28px, 2.1vw, 38px); }
+.degen-miner-portfolio .mc-card-token-name {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin: 0; opacity: 1; color: var(--fg); font: 500 20px/1.5 "DM Sans", sans-serif; letter-spacing: 0;
+}
+.degen-miner-portfolio .mc-card-token-name img { width: 27px; height: 27px; object-fit: contain; }
+.degen-miner-portfolio .mc-card-token-name .help-tip { margin: 0; }
+.degen-miner-portfolio .mc-card-progress { margin: 0 0 20px; }
+.degen-miner-portfolio .mc-card-progress + .mc-card-progress { margin-top: 0; }
+.degen-miner-portfolio .mc-card-prog-label { margin-bottom: 10px; color: var(--fg); opacity: 1; font: 500 14px/1.6 "DM Sans", sans-serif; letter-spacing: 0; }
+.degen-miner-portfolio .mc-card-prog-label > span:last-child { font-weight: 700; }
+.degen-miner-portfolio .mc-card-bar-track { height: 12px; border-radius: 4px; background: var(--border); }
+.degen-miner-portfolio .mc-card-bar-fill { background: var(--accent); }
+.degen-miner-portfolio .mc-card-days { margin-top: 8px; flex-wrap: wrap; gap: 6px; color: color-mix(in srgb, var(--fg) 78%, var(--panel)); opacity: 1; font: 500 14px/1.6 "DM Sans", sans-serif; }
+.degen-miner-portfolio .mc-ready-pill { font: 600 11px/1.4 "DM Sans", sans-serif; padding: 3px 7px; letter-spacing: 0; text-transform: none; border-color: var(--border); background: transparent; color: var(--fg); }
+.degen-miner-portfolio .miner-dates { width: 100%; display: grid; gap: 10px; margin: 0 0 18px; text-align: left; font: 500 16px/1.5 "DM Sans", sans-serif; }
+.degen-miner-portfolio .miner-dates > div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.degen-miner-portfolio .miner-dates dd { margin: 0; text-align: right; }
+.degen-miner-portfolio .miner-dates time { display: grid; gap: 2px; }
+.degen-miner-portfolio .miner-dates small { font-size: 12px; color: color-mix(in srgb, var(--fg) 72%, var(--panel)); }
+.degen-miner-portfolio .miner-withdrawal { margin: 0; padding-top: 14px; }
+.degen-miner-portfolio .miner-withdrawal-badge { border: 0; padding: 0; background: transparent; font-size: 13px; }
+.degen-miner-portfolio .mc-actions-btn { background: transparent; border-color: var(--border); }
+.degen-miner-portfolio .miners-empty { padding: 48px 24px; border: 1px dashed var(--border); border-radius: 12px; text-align: center; }
+.degen-miner-portfolio .miners-empty h2 { font: 700 24px/1.4 "DM Sans", sans-serif; }
+.degen-miner-portfolio .rw-miners-list th { font: 600 14px/1.5 "DM Sans", sans-serif; color: var(--fg); opacity: 1; letter-spacing: 0; }
+.degen-miner-portfolio .rw-miners-list td { font: 500 16px/1.5 "DM Sans", sans-serif; padding: 14px 12px; }
+.degen-miner-portfolio .miner-table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); }
+.degen-miner-portfolio .miner-table-scroll .rw-miners-list { min-width: 700px; }
+.degen-miner-portfolio :is(.rw-list-amount, .rw-list-days, .rw-list-pct, .rw-list-penalty) { font-family: "DM Sans", sans-serif; font-size: 14px; color: var(--fg); opacity: 1; }
+@media (max-width: 1100px) {
+  .degen-miner-portfolio .miners-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .degen-miner-portfolio .miners-toolbar > label:first-child { grid-column: 1 / -1; }
+  .degen-miner-portfolio .miners-toolbar > button { justify-self: end; }
+  .degen-miner-portfolio .mc-card { padding: 24px; }
+}
+@media (max-width: 700px) {
+  .degen-miner-portfolio .miners-summary-row { grid-template-columns: 1fr; gap: 14px; }
+  .degen-miner-portfolio .miners-summary-col { min-height: 0; border-left: 0; }
+  .degen-miner-portfolio .miners-summary-col + .miners-summary-col { border-top: 1px solid var(--border); padding-top: 14px; }
+  .degen-miner-portfolio .rw-miners-grid { grid-template-columns: 1fr; }
+  .degen-miner-portfolio .mc-card-amount { font-size: 40px; }
+  .degen-miner-portfolio .mc-card-amount-long { font-size: 30px; }
+  .degen-miner-portfolio .miner-deadline-shortcuts { margin-bottom: 28px; }
+}
+@media (max-width: 440px) {
+  .degen-miner-portfolio .miners-toolbar { grid-template-columns: minmax(0, 1fr); }
+  .degen-miner-portfolio .miners-toolbar > button { justify-self: stretch; }
+}

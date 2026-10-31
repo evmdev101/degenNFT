@@ -137,15 +137,44 @@ a {
   position: sticky;
   top: 0;
   z-index: 100;
-  min-height: 90px;
-  padding: 14px 24px;
+  min-height: 64px;
+  padding: 8px clamp(18px, 4vw, 44px);
   display: flex;
   align-items: center;
-  gap: 24px;
   background: color-mix(in srgb, var(--panel) 83%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
   backdrop-filter: blur(22px) saturate(150%);
   box-shadow: 0 10px 35px #0005;
+}
+.site-header-inner {
+  width: 100%;
+  max-width: 1480px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: clamp(18px, 3vw, 34px);
+}
+.nav-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.nav-icon {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 44%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--panel) 76%, transparent);
+  color: var(--fg);
+  text-decoration: none;
+  box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.nav-icon svg {
+  fill: currentColor;
 }
 .brand {
   display: flex;
@@ -171,10 +200,10 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 8px;
   flex: 1 1 auto;
   min-width: 0;
-  min-height: 42px;
+  min-height: 36px;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -185,14 +214,14 @@ a {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 40px;
+  min-height: 34px;
   padding: 0 12px;
   border: 1px solid transparent;
   border-radius: 8px;
   background: none;
   color: color-mix(in srgb, var(--fg) 88%, transparent);
   font-family: "Barlow", sans-serif;
-  font-size: 0.94rem;
+  font-size: 0.9rem;
   font-weight: 800;
   letter-spacing: 0;
   text-transform: none;
@@ -214,9 +243,9 @@ a {
 }
 .site-header .primary-nav > a.active {
   color: var(--fg);
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
-  box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 16%, transparent);
+  background: color-mix(in srgb, var(--red) 42%, transparent);
+  border-color: color-mix(in srgb, var(--red) 46%, transparent);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--red) 16%, transparent);
 }
 .site-header .primary-nav > a:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 72%, white);
@@ -230,20 +259,20 @@ a {
 }
 .pill-button,
 .wallet-button {
-  height: 42px;
-  padding: 0 19px;
+  height: 38px;
+  padding: 0 17px;
   border: 1px solid var(--accent);
   border-radius: 999px;
   background: color-mix(in srgb, var(--panel) 82%, transparent);
   color: var(--fg);
   cursor: pointer;
-  font-size: 0.68rem;
-  font-weight: 700;
+  font-size: 0.76rem;
+  font-weight: 800;
 }
 .wallet-button {
-  background: var(--accent);
-  color: var(--bg);
-  box-shadow: 0 0 24px color-mix(in srgb, var(--accent) 42%, transparent);
+  background: color-mix(in srgb, var(--panel) 82%, transparent);
+  color: var(--fg);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 18%, transparent);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -262,9 +291,14 @@ a {
   font-size: 0.72rem;
 }
 .theme-window {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - min(110px, 15vh) - 12px);
+  max-height: calc(100dvh - min(110px, 15dvh) - 12px);
   position: fixed;
   z-index: 500;
-  top: 110px;
+  top: min(110px, 15vh);
+  top: min(110px, 15dvh);
   right: 24px;
   width: min(520px, calc(100vw - 24px));
   border: 1px solid var(--border);
@@ -281,6 +315,7 @@ a {
   opacity: 0.32;
 }
 .theme-window-head {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -302,12 +337,17 @@ a {
   font-size: 0.65rem;
 }
 .theme-window-tabs {
+  flex-shrink: 0;
   padding: 10px 14px;
   border-bottom: 1px solid var(--border);
   color: var(--accent);
   font-size: 0.7rem;
 }
 .theme-window-body {
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  scrollbar-color: var(--accent) var(--panel);
   margin: 10px;
   padding: 12px;
   border: 1px solid var(--border);
@@ -1291,10 +1331,9 @@ a {
 .cashx-holder-header span:nth-child(3) {
   text-align: right;
 }
-.cashx-holder-scroll {
-  max-height: 400px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+.scroll-region.cashx-holder-scroll {
+  max-height: min(68vh, 400px);
+  max-height: min(68dvh, 400px);
   padding-right: 8px;
 }
 .cashx-holder-row {
@@ -1424,10 +1463,7 @@ a {
   letter-spacing: 0.18em;
   text-transform: uppercase;
 }
-.cashx-activity-scroll {
-  max-height: 676px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+.scroll-region.cashx-activity-scroll {
   padding-right: 8px;
 }
 .cashx-activity-row {
@@ -1622,7 +1658,7 @@ a {
     font-size: 0.58rem;
   }
   .site-header .primary-nav > a {
-    min-height: 38px;
+    min-height: 34px;
     padding: 0 10px;
     font-size: 0.82rem;
   }
@@ -1681,7 +1717,10 @@ a {
     font-size: 0.54rem;
   }
   .theme-window {
-    top: 80px;
+    top: min(80px, 15vh);
+    top: min(80px, 15dvh);
+    max-height: calc(100vh - min(80px, 15vh) - 12px);
+    max-height: calc(100dvh - min(80px, 15dvh) - 12px);
     right: 12px;
   }
   .theme-grid {
@@ -1722,3 +1761,14 @@ a {
     border-left: 0;
   }
 }
+
+/* Reserved route geometry keeps navigation visible during code loading. */
+.route-skeleton { width: min(1280px, 100%); margin: 0 auto; padding: 28px 20px; min-height: 65vh; }
+.route-skeleton-heading { width: 220px; height: 36px; margin-bottom: 24px; background: var(--panel); border-radius: 8px; }
+.route-skeleton-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.route-skeleton-card { min-height: 220px; padding: 24px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); }
+.route-skeleton-card i, .route-skeleton-card b { display: block; width: 45%; height: 16px; margin-bottom: 24px; border-radius: 4px; background: color-mix(in srgb, var(--fg) 10%, transparent); }
+.route-skeleton-card b { height: 38px; width: 65%; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 640px) { .route-skeleton-grid { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; } }

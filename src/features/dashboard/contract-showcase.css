@@ -1,0 +1,49 @@
+.degen-contract-showcase { min-width: 0; overflow: visible; }
+.degen-contract-stage { perspective: 1100px; min-width: 0; }
+.degen-contract-editor { position: relative; border: 2px solid var(--accent); border-radius: 10px; overflow: hidden; background: #0e1119; box-shadow: 0 0 60px color-mix(in srgb, var(--accent) 28%, transparent); transform-origin: 50% 50%; animation: degen-code-sway 12s ease-in-out infinite alternate; }
+.degen-contract-stage[data-paused="true"] .degen-contract-editor, .degen-contract-stage:focus-within .degen-contract-editor, .degen-contract-stage:hover .degen-contract-editor { animation-play-state: paused; }
+@keyframes degen-code-sway { from { transform: rotateY(-1.3deg) rotateX(.6deg); } to { transform: rotateY(1.3deg) rotateX(-.6deg); } }
+.degen-editor-sheen { position: absolute; inset: 0; z-index: 3; border-radius: inherit; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at 38% 25%, #fff4, #ffffff0d 28%, transparent 65%); mix-blend-mode: screen; }
+.degen-contract-editor[data-light="true"] .degen-editor-sheen { opacity: .85; }
+.degen-editor-title { display: flex; align-items: center; gap: 14px; padding: 12px; border-bottom: 1px solid #ffffff15; background: #171b25; color: #dce3ef; font: 500 11px 'DM Sans', sans-serif; }
+.degen-editor-title > span:last-child { margin-left: auto; color: #a5aec1; font-size: 10px; }
+.degen-editor-dots { display: flex; gap: 5px; }
+.degen-editor-dots i { width: 6px; height: 6px; border-radius: 50%; background: #fc6a69; }
+.degen-editor-dots i:nth-child(2) { background: #eac15c; }
+.degen-editor-dots i:nth-child(3) { background: #63c891; }
+.degen-source-select { display: block; padding: 10px 12px 0; }
+.degen-source-select select { width: 100%; min-width: 0; padding: 7px; border: 1px solid #30394a; border-radius: 5px; background: #171b25; color: #dce3ef; font: 500 11px 'DM Sans', sans-serif; color-scheme: dark; }
+.degen-source-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; color: #bec9dc; font: 500 10px 'DM Sans', sans-serif; }
+.degen-source-toolbar label { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.degen-source-toolbar input { margin: 0; accent-color: var(--accent); }
+.degen-contract-showcase .degen-source-toolbar button { border: 0; padding: 5px 0; background: none; color: #c9d6ef; font: 500 10px 'DM Sans', sans-serif; cursor: pointer; }
+.degen-source-code { position: relative; box-sizing: border-box; height: min(560px, 65dvh); margin: 0; overflow: auto; overscroll-behavior: contain; padding: 14px 0; background: #0e1119; color: #dce3ef; font: 11px/1.85 'Fira Code', ui-monospace, monospace; tab-size: 4; scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: #3b485e #0e1119; color-scheme: dark; }
+.degen-code-line { display: flex; min-width: max-content; }
+.degen-code-number { position: sticky; left: 0; z-index: 1; box-sizing: content-box; width: 4ch; flex-shrink: 0; padding: 0 12px 0 6px; color: #78869f; background: #0e1119; border-right: 1px solid #ffffff0b; text-align: right; user-select: none; }
+.degen-code-text { padding: 0 14px; }
+.degen-source-code.is-wrapped { white-space: pre-wrap; overflow-wrap: anywhere; }
+.degen-source-code.is-wrapped .degen-code-line { min-width: 0; }
+.degen-source-code.is-wrapped .degen-code-text { min-width: 0; }
+.degen-code-keyword { color: #6fbcff; }
+.degen-code-comment { color: #87b77a; }
+.degen-code-string { color: #e6bd91; }
+.degen-code-numeric { color: #d3a2e8; }
+.degen-code-line:hover { background: #ffffff04; }
+.degen-editor-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border-top: 1px solid #ffffff15; background: #171b25; font: 500 10px 'DM Sans', sans-serif; }
+.degen-editor-footer a { color: #a5aec1; text-decoration: none; }
+.degen-editor-footer a:hover { color: #dce3ef; text-decoration: underline; }
+.degen-editor-footer button { border: 1px solid #3b485e; border-radius: 5px; padding: 5px 8px; color: #dce3ef; background: #202838; font: 500 10px 'DM Sans', sans-serif; cursor: pointer; }
+.degen-source-message { display: block; padding: 16px; color: #c9d6ef; white-space: normal; }
+.degen-source-effects { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; min-height: 42px; padding-top: 10px; }
+.degen-source-effects button, .degen-source-dialog button { padding: 5px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--fg); font: 600 11px/16px 'DM Sans', sans-serif; cursor: pointer; }
+.degen-source-effects button[aria-pressed="true"], .degen-source-effects button:hover { border-color: var(--accent); }
+.degen-contract-showcase button:disabled { opacity: .5; cursor: not-allowed; }
+.degen-contract-showcase :is(button, a, input, select, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.degen-source-dialog { box-sizing: border-box; width: min(1160px, calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow: auto; padding: 18px; border: 1px solid var(--border); border-radius: 14px; color: var(--fg); background: var(--panel); }
+.degen-source-dialog::backdrop { background: #000c; backdrop-filter: blur(7px); }
+.degen-source-dialog > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.degen-source-dialog h3 { margin: 0; font: 700 18px 'DM Sans', sans-serif; }
+.degen-source-dialog .degen-source-code { height: calc(100dvh - 150px); border: 1px solid #30394a; border-radius: 8px; }
+.degen-code-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .degen-contract-editor { animation: none; transform: none; } }
+@media (max-width: 480px) { .degen-source-toolbar { flex-wrap: wrap; } .degen-source-code { font-size: 10px; } .degen-source-effects button { min-height: 36px; } }

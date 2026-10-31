@@ -38,6 +38,7 @@ export const SALE_ABI = [
   "function PLSX() view returns (address)",
   "function INC() view returns (address)",
   "function DTX() view returns (address)",
+  "function TOKEN_X() view returns (address)",
 ] as const;
 
 export const ERC20_ABI = [
@@ -125,6 +126,11 @@ export const PULSECHAIN = {
   chainId: CHAIN_HEX,
   chainName: "PulseChain",
   nativeCurrency: { name: "Pulse", symbol: "PLS", decimals: 18 },
-  rpcUrls: ["https://rpc.pulsechain.com"],
+  rpcUrls: [
+    "https://rpc.pulsechain.com",
+    "https://pulsechain-rpc.publicnode.com",
+    "https://pulsechain.publicnode.com",
+    "https://rpc-pulsechain.g4mm4.io",
+  ],
   blockExplorerUrls: ["https://scan.pulsechain.com"],
 };

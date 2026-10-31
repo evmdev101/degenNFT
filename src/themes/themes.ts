@@ -1,6 +1,26 @@
 export type ThemeName = keyof typeof THEMES;
 
+export const THEME_COLOR_KEYS = ["bg", "fg", "panel", "border", "accent"] as const;
+export type ThemeColors = Record<(typeof THEME_COLOR_KEYS)[number], string>;
+
+export const isThemeName = (name: unknown): name is ThemeName =>
+  typeof name === "string" && Object.prototype.hasOwnProperty.call(THEMES, name);
+
+export function applyThemeColors(colors: ThemeColors) {
+  THEME_COLOR_KEYS.forEach((key) =>
+    document.documentElement.style.setProperty(`--${key}`, colors[key]),
+  );
+}
+
 export const THEMES = {
+  oink: {
+    bg: "#241a20",
+    fg: "#f2cfde",
+    panel: "#171013",
+    border: "#5c3a4b",
+    accent: "#ff6b9d",
+    effect: "none",
+  },
   original: {
     bg: "#282c34",
     fg: "#9cdef2",
@@ -129,15 +149,87 @@ export const THEMES = {
     accent: "#ff6b9d",
     effect: "sparkles",
   },
+  aurora: {
+    bg: "#071a18",
+    fg: "#e5fff5",
+    panel: "#0b2420",
+    border: "#2f6d5c",
+    accent: "#60f0b6",
+    effect: "none",
+  },
+  amethyst: {
+    bg: "#171127",
+    fg: "#f3efff",
+    panel: "#211832",
+    border: "#665080",
+    accent: "#bea1ff",
+    effect: "none",
+  },
+  sunset: {
+    bg: "#251714",
+    fg: "#fff0e8",
+    panel: "#301f1b",
+    border: "#895747",
+    accent: "#ffa58e",
+    effect: "none",
+  },
+  gold: {
+    bg: "#18150d",
+    fg: "#fff6df",
+    panel: "#221d12",
+    border: "#796638",
+    accent: "#ffd36e",
+    effect: "none",
+  },
+  glacier: {
+    bg: "#091629",
+    fg: "#eef5ff",
+    panel: "#10213a",
+    border: "#365b89",
+    accent: "#80b6ff",
+    effect: "none",
+  },
+  matcha: {
+    bg: "#151c10",
+    fg: "#f0f7e8",
+    panel: "#1b2516",
+    border: "#566d3c",
+    accent: "#bce18a",
+    effect: "none",
+  },
+  cherry: {
+    bg: "#231219",
+    fg: "#ffe9f1",
+    panel: "#301922",
+    border: "#7c4357",
+    accent: "#ff96b7",
+    effect: "none",
+  },
+  slate: {
+    bg: "#111820",
+    fg: "#edf2f7",
+    panel: "#19232e",
+    border: "#4d6177",
+    accent: "#b8d2ed",
+    effect: "none",
+  },
+  obsidian: {
+    bg: "#09090f",
+    fg: "#f4f4f5",
+    panel: "#131318",
+    border: "#34333d",
+    accent: "#f5b331",
+    effect: "starlight",
+  },
 } as const;
+
+export const NEW_THEME_NAMES = ["obsidian", "aurora", "amethyst", "sunset", "gold", "glacier", "matcha", "cherry", "slate"] as const satisfies readonly ThemeName[];
 
 export function applyTheme(name: ThemeName) {
   const theme = THEMES[name];
-  const root = document.documentElement;
-  root.style.setProperty("--bg", theme.bg);
-  root.style.setProperty("--fg", theme.fg);
-  root.style.setProperty("--panel", theme.panel);
-  root.style.setProperty("--border", theme.border);
-  root.style.setProperty("--accent", theme.accent);
-  localStorage.setItem("degen-react-theme", name);
+  document.documentElement.dataset.theme = name;
+  applyThemeColors(theme);
+  try {
+    localStorage.setItem("degen-react-theme", name);
+  } catch { /* Theme changes still work when browser storage is unavailable. */ }
 }

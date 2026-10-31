@@ -1,3 +1,5 @@
+import { usePageActive } from "../hooks/usePageActive";
+import { confirmTransaction } from "../lib/transactions";
 // DEGEN Sale tab — markup and styling restored verbatim from the original
 // single-file site (commit 825e9f2). Logic mirrors loadDegenSaleTab,
 // openDsaleBuyModal / executeDsaleBuy, openDsaleClaimModal / executeDsaleClaim.
@@ -6,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CONTRACTS, ERC20_ABI, SALE_ABI } from "../config/contracts";
 import type { WalletState } from "../hooks/useWallet";
 import { getPublicProvider, readableError } from "../lib/chain";
+import "./miner-forms.css";
 
 const POOL_10Y = "0xdE672FccA32365bD704c39bd1164a0D34a3a73e6";
 const POOL_1Y = "0x3d175C8359169b0e830d36EA9CD3FE209f46f7BD";
@@ -28,197 +31,180 @@ type ModalStatus = {
 } | null;
 
 export function SalePage({ wallet }: { wallet: WalletState }) {
+  const pageActive = usePageActive();
   const [availText, setAvailText] = useState<string | null>(null);
+  const [inventory, setInventory] = useState<bigint | null>(null);
   const [pendingWei, setPendingWei] = useState<bigint | null>(null);
-  const [bonusWei, setBonusWei] = useState<bigint>(0n);
-
   const [activeTab, setActiveTab] = useState<"buy" | "claim">("buy");
-
   const [buyMethod, setBuyMethod] = useState<BuyMethod>("PLS");
   const [buyPool, setBuyPool] = useState(POOL_10Y);
   const [buyAmount, setBuyAmount] = useState("");
   const [buyQuote, setBuyQuote] = useState("—");
   const [buyBusy, setBuyBusy] = useState(false);
   const [buyStatus, setBuyStatus] = useState<ModalStatus>(null);
-
   const [claimPool, setClaimPool] = useState(POOL_10Y);
   const [claimAmount, setClaimAmount] = useState("");
   const [claimBusy, setClaimBusy] = useState(false);
   const [claimStatus, setClaimStatus] = useState<ModalStatus>(null);
-
+  const [spendable, setSpendable] = useState<Partial<Record<BuyMethod, bigint>>>({});
+  const [unitQuotes, setUnitQuotes] = useState<Record<string, bigint>>({});
+  const active = useRef(false);
+  const sequence = useRef(0);
+  const quoteSequence = useRef(0);
   const quoteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const totalPending = (pendingWei ?? 0n) + bonusWei;
+  const totalPending = pendingWei ?? 0n;
 
   const load = useCallback(async () => {
+    const seq = ++sequence.current;
     try {
       const provider = await getPublicProvider();
       const sale = new Contract(CONTRACTS.sale, SALE_ABI, provider);
-      // Available DEGEN (balance of the sale contract)
-      try {
-        const degen = new Contract(CONTRACTS.degen, ERC20_ABI, provider);
-        const avail: bigint = await degen.balanceOf(CONTRACTS.sale);
-        setAvailText(fmtDsaleWholeToken(avail) + " DEGEN");
-      } catch {
-        setAvailText("—");
-      }
-      // User pending
+      const current = () => seq === sequence.current;
+      const jobs: Promise<unknown>[] = [
+        (async () => {
+          const degen = new Contract(CONTRACTS.degen, ERC20_ABI, provider);
+          const available: bigint = await degen.balanceOf(CONTRACTS.sale);
+          if (current()) { setInventory(available); setAvailText(fmtDsaleWholeToken(available) + " DEGEN"); }
+        })(),
+      ];
       if (wallet.address) {
-        try {
-          const [pending, bonus] = await Promise.all([
-            sale.userTokens(wallet.address),
-            sale.bonusAmount(wallet.address),
-          ]);
-          setPendingWei(pending);
-          setBonusWei(bonus);
-        } catch {
-          setPendingWei(null);
-          setBonusWei(0n);
-        }
-      } else {
-        setPendingWei(null);
-        setBonusWei(0n);
+        const account = wallet.address;
+        // Claim allocation is essential and must not wait for optional Max data.
+        jobs.push((async () => {
+          const pending: bigint = await sale.userTokens(account);
+          if (current()) setPendingWei(pending);
+        })());
+        jobs.push((async () => {
+          const [nativeBalance, fees] = await Promise.all([provider.getBalance(account), provider.getFeeData()]);
+          const reserve = fees.gasPrice === null ? nativeBalance : fees.gasPrice * 2_000_000n;
+          if (current()) setSpendable(previous => ({ ...previous, PLS: nativeBalance > reserve ? nativeBalance - reserve : 0n }));
+        })());
+        for (const method of ["PLSX", "INC"] as const) jobs.push((async () => {
+          const tokenAddress = await sale[method]();
+          const token = new Contract(tokenAddress, [...ERC20_ABI, "function decimals() view returns (uint8)"], provider);
+          const [balance, decimals] = await Promise.all([token.balanceOf(account), token.decimals()]);
+          if (Number(decimals) !== 18) throw new Error("Payment token precision changed.");
+          if (current()) setSpendable(previous => ({ ...previous, [method]: balance }));
+        })());
       }
-    } catch (e) {
-      console.warn("DSALE load", e);
-      setAvailText("—");
-    }
+      const pools = [POOL_10Y, POOL_1Y, POOL_3M];
+      jobs.push((async () => {
+        const quotes = await Promise.all(pools.flatMap(pool => (["PLS", "PLSX", "INC"] as BuyMethod[]).map(async method => {
+          const q: bigint = await sale[`getWith${method}`](10n ** 18n, pool);
+          return [`${method}:${pool}`, q] as const;
+        })));
+        if (current()) setUnitQuotes(Object.fromEntries(quotes));
+      })());
+      await Promise.allSettled(jobs);
+    } catch { /* Retain the last successful values; recover on the next poll. */ }
   }, [wallet.address]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    setPendingWei(null); setSpendable({});
+    setBuyAmount(""); setClaimAmount(""); setBuyQuote("—");
+    setBuyStatus(null); setClaimStatus(null);
+  }, [wallet.address]);
 
-  // ── Buy / Claim tab switching ──
-  function switchToBuy() {
-    setActiveTab("buy");
-    setBuyAmount("");
-    setBuyQuote("—");
-    setBuyStatus(null);
-    setBuyBusy(false);
-  }
+  useEffect(() => {
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      if (disposed) return;
+      if (pageActive && !document.hidden) await load();
+      if (!disposed) timer = setTimeout(() => void poll(), 60_000);
+    };
+    void poll();
+    return () => { disposed = true; sequence.current++; quoteSequence.current++; clearTimeout(timer); if (quoteTimer.current) clearTimeout(quoteTimer.current); };
+  }, [load, pageActive]);
 
-  function switchToClaim() {
-    setActiveTab("claim");
-    setClaimAmount(parseFloat(formatEther(totalPending)).toFixed(0));
-    setClaimStatus(null);
-    setClaimBusy(false);
-  }
-
-  function scheduleQuote(amtStr: string, method: BuyMethod, pool: string) {
+  function switchToBuy() { setActiveTab("buy"); }
+  function switchToClaim() { setActiveTab("claim"); if (!claimAmount && pendingWei !== null) setClaimAmount(formatEther(totalPending)); }
+  function scheduleQuote(amount: string, method: BuyMethod, pool: string) {
+    const seq = ++quoteSequence.current;
     if (quoteTimer.current) clearTimeout(quoteTimer.current);
-    setBuyQuote("…");
-    quoteTimer.current = setTimeout(() => {
-      void (async () => {
-        if (!amtStr || parseFloat(amtStr) <= 0) {
-          setBuyQuote("—");
-          return;
-        }
-        try {
-          const provider = await getPublicProvider();
-          const sale = new Contract(CONTRACTS.sale, SALE_ABI, provider);
-          const amtWei = parseEther(amtStr);
-          let q: bigint;
-          if (method === "PLS") q = await sale.getWithPLS(amtWei, pool);
-          else if (method === "PLSX") q = await sale.getWithPLSX(amtWei, pool);
-          else q = await sale.getWithINC(amtWei, pool);
-          setBuyQuote(fmt0(q) + " DEGEN");
-        } catch {
-          setBuyQuote("Quote failed");
-        }
-      })();
-    }, 420);
+    setBuyQuote("—");
+    quoteTimer.current = setTimeout(() => { void (async () => {
+      try {
+        const payment = parseEther(amount);
+        if (payment <= 0n) return;
+        const provider = await getPublicProvider();
+        const sale = new Contract(CONTRACTS.sale, SALE_ABI, provider);
+        const quote: bigint = await sale[`getWith${method}`](payment, pool);
+        if (seq === quoteSequence.current) setBuyQuote(fmt0(quote) + " DEGEN");
+      } catch { if (seq === quoteSequence.current) setBuyQuote("Unavailable"); }
+    })(); }, 300);
+  }
+  function maxBuy() {
+    let maximum = spendable[buyMethod];
+    const rate = unitQuotes[`${buyMethod}:${buyPool}`];
+    if (maximum === undefined || inventory === null || !rate) return;
+    const inventoryLimit = inventory * 10n ** 18n / rate;
+    if (maximum > inventoryLimit) maximum = inventoryLimit;
+    const amount = formatEther(maximum);
+    setBuyAmount(amount); scheduleQuote(amount, buyMethod, buyPool);
   }
 
   async function executeBuy() {
-    if (!buyAmount || parseFloat(buyAmount) <= 0) {
-      setBuyStatus({ kind: "error", text: "Enter an amount to spend." });
-      return;
-    }
-    setBuyBusy(true);
-    setBuyStatus({ kind: "pending", text: "Preparing transaction…" });
+    if (active.current) return;
+    active.current = true; setBuyBusy(true); setBuyStatus(null);
     try {
-      const signer = await wallet.getSigner();
-      const amtWei = parseEther(buyAmount);
-      const sale = new Contract(CONTRACTS.sale, SALE_ABI, signer);
-      let tx;
-      if (buyMethod === "PLS") {
-        setBuyStatus({
-          kind: "pending",
-          text: "Waiting for wallet confirmation…",
-        });
-        tx = await sale.buyWithPLS(amtWei, buyPool, { value: amtWei });
-      } else {
-        const provider = await getPublicProvider();
-        const roSale = new Contract(CONTRACTS.sale, SALE_ABI, provider);
-        const tokenAddr: string =
-          buyMethod === "PLSX" ? await roSale.PLSX() : await roSale.INC();
-        const tkn = new Contract(tokenAddr, ERC20_ABI, signer);
-        const allowed: bigint = await tkn.allowance(
-          wallet.address,
-          CONTRACTS.sale,
-        );
-        if (allowed < amtWei) {
-          setBuyStatus({ kind: "pending", text: `Approving ${buyMethod}…` });
-          const appTx = await tkn.approve(CONTRACTS.sale, amtWei);
-          setBuyStatus({
-            kind: "pending",
-            text: "Approve sent — confirming…",
-          });
-          await appTx.wait();
+      const amount = parseEther(buyAmount);
+      if (amount <= 0n) throw new Error("Enter a positive amount to spend.");
+      if (![POOL_10Y, POOL_1Y, POOL_3M].includes(buyPool)) throw new Error("Choose a supported pool.");
+      let signer = await wallet.getSigner();
+      const account = await signer.getAddress();
+      let sale = new Contract(CONTRACTS.sale, SALE_ABI, signer);
+      // DTX is OINK, used by the sale's pricing route; TOKEN_X is the DEGEN sold.
+      if (String(await sale.TOKEN_X()).toLowerCase() !== CONTRACTS.degen.toLowerCase()) throw new Error("Sale token changed. This purchase is unavailable.");
+      const quote: bigint = await sale[`getWith${buyMethod}`](amount, buyPool);
+      const available: bigint = await new Contract(CONTRACTS.degen, ERC20_ABI, signer).balanceOf(CONTRACTS.sale);
+      if (quote <= 0n || quote > available) throw new Error("The sale cannot fill this amount. Choose a smaller amount.");
+      if (buyMethod !== "PLS") {
+        const tokenAddress = await sale[buyMethod]();
+        const token = new Contract(tokenAddress, [...ERC20_ABI, "function decimals() view returns (uint8)"], signer);
+        const [balance, allowance, decimals] = await Promise.all([token.balanceOf(account), token.allowance(account, CONTRACTS.sale), token.decimals()]);
+        if (Number(decimals) !== 18) throw new Error("Payment token precision changed.");
+        if (amount > balance) throw new Error("Amount exceeds your current token balance.");
+        if (allowance < amount) {
+          await token.approve.staticCall(CONTRACTS.sale, amount);
+          await confirmTransaction(await token.approve(CONTRACTS.sale, amount));
+          signer = await wallet.getSigner();
+          if ((await signer.getAddress()).toLowerCase() !== account.toLowerCase()) throw new Error("Wallet changed. Choose the action again.");
+          sale = new Contract(CONTRACTS.sale, SALE_ABI, signer);
         }
-        setBuyStatus({
-          kind: "pending",
-          text: "Waiting for wallet confirmation…",
-        });
-        tx =
-          buyMethod === "PLSX"
-            ? await sale.buyWithPLSX(amtWei, buyPool)
-            : await sale.buyWithINC(amtWei, buyPool);
       }
-      setBuyStatus({ kind: "pending", text: "Transaction sent — confirming…" });
-      await tx.wait();
-      setBuyStatus({
-        kind: "success",
-        text: `Purchased! TX: ${tx.hash.slice(0, 10)}…`,
-      });
-      void load();
-    } catch (e) {
-      setBuyStatus({ kind: "error", text: readableError(e) });
-    } finally {
-      setBuyBusy(false);
-    }
+      const method = sale[`buyWith${buyMethod}`];
+      const overrides = buyMethod === "PLS" ? { value: amount } : {};
+      await method.staticCall(amount, buyPool, overrides);
+      const gas: bigint = await method.estimateGas(amount, buyPool, overrides);
+      const [fees, balance] = await Promise.all([signer.provider.getFeeData(), signer.provider.getBalance(account)]);
+      const price = fees.maxFeePerGas ?? fees.gasPrice;
+      if (price === null || balance < (buyMethod === "PLS" ? amount : 0n) + gas * price * 120n / 100n) throw new Error("Keep enough PLS for the purchase and network fee.");
+      await confirmTransaction(await method(amount, buyPool, overrides));
+      setBuyStatus({ kind: "success", text: "Miner purchased." }); setBuyAmount(""); setBuyQuote("—");
+      await load();
+    } catch (error) { setBuyStatus({ kind: "error", text: readableError(error) }); }
+    finally { active.current = false; setBuyBusy(false); }
   }
 
   async function executeClaim() {
-    if (!claimAmount || parseFloat(claimAmount) <= 0) {
-      setClaimStatus({ kind: "error", text: "Enter an amount to claim." });
-      return;
-    }
-    setClaimBusy(true);
-    setClaimStatus({
-      kind: "pending",
-      text: "Waiting for wallet confirmation…",
-    });
+    if (active.current) return;
+    active.current = true; setClaimBusy(true); setClaimStatus(null);
     try {
+      const amount = parseEther(claimAmount);
+      if (amount <= 0n) throw new Error("Enter a positive claim amount.");
       const signer = await wallet.getSigner();
-      const amtWei = parseEther(claimAmount);
+      const account = await signer.getAddress();
       const sale = new Contract(CONTRACTS.sale, SALE_ABI, signer);
-      const tx = await sale.claimTokens(amtWei, claimPool);
-      setClaimStatus({
-        kind: "pending",
-        text: "Transaction sent — confirming…",
-      });
-      await tx.wait();
-      setClaimStatus({
-        kind: "success",
-        text: `Claimed! TX: ${tx.hash.slice(0, 10)}…`,
-      });
-      void load();
-    } catch (e) {
-      setClaimStatus({ kind: "error", text: readableError(e) });
-    } finally {
-      setClaimBusy(false);
-    }
+      const pending: bigint = await sale.userTokens(account);
+      if (amount > pending) throw new Error("Claimable balance changed. Choose a smaller amount.");
+      if (![POOL_10Y, POOL_1Y, POOL_3M].includes(claimPool)) throw new Error("Choose a supported claim pool.");
+      await sale.claimTokens.staticCall(amount, claimPool);
+      await confirmTransaction(await sale.claimTokens(amount, claimPool));
+      setClaimStatus({ kind: "success", text: "Rewards claimed." }); setClaimAmount("");
+      await load();
+    } catch (error) { setClaimStatus({ kind: "error", text: readableError(error) }); }
+    finally { active.current = false; setClaimBusy(false); }
   }
 
   return (
@@ -238,7 +224,7 @@ export function SalePage({ wallet }: { wallet: WalletState }) {
             <div className="dsale-avail">
               <div className="dsale-avail-label">Tokens Available For Sale</div>
               <div className="dsale-avail-val">
-                {availText ?? <span className="spinner" />}
+                {availText ?? "—"}
               </div>
             </div>
 
@@ -280,9 +266,7 @@ export function SalePage({ wallet }: { wallet: WalletState }) {
                     : `${fmt0(totalPending)} DEGEN`}
               </div>
               <div className="dsale-panel-stat-sub">
-                {wallet.address && pendingWei !== null && bonusWei > 0n
-                  ? `${fmt0(pendingWei)} base + ${fmt0(bonusWei)} bonus`
-                  : "Protocol DEGEN allocated to your wallet and ready to claim."}
+                Protocol DEGEN allocated to your wallet and ready to claim.
               </div>
             </div>
 
@@ -373,7 +357,7 @@ export function SalePage({ wallet }: { wallet: WalletState }) {
                   </div>
 
                   <div>
-                    <div className="dsale-modal-label">Amount to Spend</div>
+                    <div className="dsale-modal-label">Amount to Spend <button type="button" className="miner-inline-max" onClick={maxBuy} disabled={buyBusy || claimBusy || spendable[buyMethod] === undefined || !unitQuotes[`${buyMethod}:${buyPool}`]}>Max</button></div>
                     <input
                       className="dsale-modal-input"
                       type="number"
@@ -397,7 +381,7 @@ export function SalePage({ wallet }: { wallet: WalletState }) {
 
                   <button
                     className="dsale-modal-exec-btn"
-                    disabled={buyBusy}
+                    disabled={buyBusy || claimBusy}
                     onClick={() => void executeBuy()}
                   >
                     Get DEGEN!
@@ -415,12 +399,12 @@ export function SalePage({ wallet }: { wallet: WalletState }) {
                       Total Claimable
                     </span>
                     <span className="dsale-modal-quote-val">
-                      {fmt0(totalPending)} DEGEN
+                      {pendingWei === null ? "—" : `${fmt0(totalPending)} DEGEN`}
                     </span>
                   </div>
 
                   <div>
-                    <div className="dsale-modal-label">Claim Amount</div>
+                    <div className="dsale-modal-label">Claim Amount <button type="button" className="miner-inline-max" disabled={claimBusy || buyBusy || pendingWei === null} onClick={() => setClaimAmount(formatEther(totalPending))}>Max</button></div>
                     <input
                       className="dsale-modal-input"
                       type="number"
@@ -439,9 +423,9 @@ export function SalePage({ wallet }: { wallet: WalletState }) {
                     <div className="dsale-modal-seg">
                       {(
                         [
-                          [POOL_10Y, "10 Year", "100% payout"],
-                          [POOL_1Y, "1 Year", "5% payout"],
-                          [POOL_3M, "3 Month", "2.5% payout"],
+                          [POOL_10Y, "10 Year", "Full allocation"],
+                          [POOL_1Y, "1 Year", "Reduced payout"],
+                          [POOL_3M, "3 Month", "Reduced payout"],
                         ] as const
                       ).map(([pool, label, sub]) => (
                         <button
@@ -456,9 +440,10 @@ export function SalePage({ wallet }: { wallet: WalletState }) {
                     </div>
                   </div>
 
+                  <p className="miner-form-estimate">Shorter pools receive less of the claimed reward. The contract rechecks current payout rules before the wallet opens.</p>
                   <button
                     className="dsale-modal-exec-btn"
-                    disabled={claimBusy || totalPending === 0n}
+                    disabled={claimBusy || buyBusy || pendingWei === null || totalPending === 0n}
                     onClick={() => void executeClaim()}
                   >
                     Claim Tokens

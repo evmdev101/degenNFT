@@ -1,0 +1,225 @@
+.farm-action-panel { position: fixed; right: 16px; bottom: 16px; z-index: 80; width: min(440px, calc(100vw - 32px)); }
+.farm-action-panel .modal-box { width: 100%; max-height: calc(100dvh - 110px); overflow-y: auto; box-shadow: 0 12px 56px #0008; }
+.farm-deposit-estimate { margin: 0; font-size: .8rem; line-height: 1.45; overflow-wrap: anywhere; color: var(--farm-muted); }
+.farm-deposit-estimate:empty { display: none; }
+.browse-farm-card .bfc-stat-val, .farm-summary-value, .farm-stake-values dd { font-variant-numeric: tabular-nums; }
+.browse-farm-card .bfc-stat-sub { min-height: 20px; }
+.browse-farms-grid { align-items: start; }
+.farm-pop-row b { overflow-wrap: anywhere; }
+.farm-stake-row { min-height: 130px; }
+@media (max-width: 600px) { .farm-action-panel { right: 8px; bottom: 8px; width: calc(100vw - 16px); } .farm-action-panel .modal-box { max-height: calc(100dvh - 100px); } }
+
+.degen-farm-card .bfc-stat-label { font-size: .75rem; }
+.degen-farm-card .bfc-stat-max { min-height: 28px; min-width: 38px; font-size: .75rem; color: var(--fg); }
+.degen-farm-card .bfc-input-row > .bfc-max { display: inline-flex; align-items: center; justify-content: center; }
+.farm-pop-portal .farm-pop-row { align-items: start; font-size: .78rem; line-height: 1.45; }
+.farm-pop-portal .farm-pop-row b { color: var(--fg); }
+.hd-opt-name small { display: block; font-size: .75rem; line-height: 1.4; }
+.degen-farm-card .bfc-name-row { display: flex; align-items: center; gap: 7px; }
+.degen-farm-card .bfc-name-row .bfc-name { min-width: 0; }
+.degen-farm-card .copy-address-compact { display: inline-flex; flex-shrink: 0; }
+.degen-farm-card .copy-address-compact button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; min-height: 22px; padding: 0;
+  border: 1px solid var(--farm-border-soft); border-radius: 50%;
+  background: color-mix(in srgb, var(--fg) 6%, var(--panel));
+  color: var(--farm-muted); cursor: pointer;
+}
+.degen-farm-card .copy-address-compact button:hover { color: var(--fg); border-color: var(--accent); }
+.browse-farm-card .bfc-footer { flex-wrap: wrap; gap: 8px; }
+
+/* Match the final OINK/CashX card treatment, after the legacy theme styles. */
+.browse-farm-card.degen-farm-card,
+.browse-farm-card.degen-farm-card:hover {
+  --farm-muted: color-mix(in srgb, var(--fg) 72%, var(--panel));
+  background: var(--panel);
+  border: 1px solid var(--farm-border-soft);
+  border-radius: 14px;
+  padding: 14px;
+  gap: 8px;
+  box-shadow: none;
+  transform: none;
+  font-family: "DM Sans", sans-serif;
+}
+.degen-farm-card .bfc-head {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: none;
+  min-height: 64px;
+}
+.degen-farm-card .bfc-sub {
+  font: 500 11px/1.4 "DM Sans", sans-serif;
+  letter-spacing: .04em;
+}
+.degen-farm-card .bfc-liquidity-btn {
+  min-height: 32px;
+  padding: 0 12px;
+  background: color-mix(in srgb, var(--accent) 16%, var(--panel));
+  color: var(--fg);
+  border-color: color-mix(in srgb, var(--accent) 54%, transparent);
+  font: 600 11px/1.3 "DM Sans", sans-serif;
+}
+.degen-farm-card .bfc-stats-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 0;
+}
+.degen-farm-card .bfc-stats-grid.bfc-stats-top { grid-template-columns: minmax(0, 1fr); }
+.degen-farm-card .bfc-stat-cell {
+  padding: 14px 12px;
+  min-height: 124px;
+  gap: 0;
+  background: color-mix(in srgb, var(--fg) 8%, var(--panel));
+  border-color: var(--farm-border-soft);
+}
+.degen-farm-card .bfc-stat-cell.bfc-compact {
+  min-height: 82px;
+  padding: 10px 12px;
+}
+.degen-farm-card .bfc-stat-label {
+  font: 500 12px/1.45 "DM Sans", sans-serif;
+  letter-spacing: 0;
+  color: var(--farm-muted);
+  margin-bottom: 9px;
+}
+.degen-farm-card .bfc-stat-cell.bfc-compact .bfc-stat-label {
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.degen-farm-card .bfc-stat-val {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 5px;
+  font: 700 16px/1.45 "DM Sans", sans-serif;
+  font-variant-numeric: tabular-nums;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: var(--fg);
+}
+.degen-farm-card .bfc-stat-val.bfc-apr {
+  font-size: 24px;
+  line-height: 1.25;
+  color: var(--accent);
+}
+.degen-farm-card .bfc-stat-tok,
+.degen-farm-card .bfc-reward-symbol {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: .8;
+  margin-left: 0;
+}
+.degen-farm-card .bfc-stat-sub {
+  font: 500 13px/1.45 "DM Sans", sans-serif;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  color: var(--farm-muted);
+}
+.degen-farm-card .bfc-stat-balance-row,
+.degen-farm-card .bfc-stat-reward-line {
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+}
+.degen-farm-card .bfc-rewards-cell .bfc-stat-reward-line {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: start;
+}
+.degen-farm-card .bfc-rewards-cell .bfc-reward-logo { margin-top: 4px; }
+.degen-farm-card .bfc-rewards-cell .bfc-stat-val { grid-column: 2; }
+.degen-farm-card .bfc-reward-amount { min-width: 0; max-width: 100%; }
+.degen-farm-card .bfc-stat-max {
+  font-family: "DM Sans", sans-serif;
+  font-size: 11px;
+  min-width: 30px;
+  min-height: 24px;
+}
+.degen-farm-card .bfc-harvest-btn,
+.farm-claim-all-btn {
+  min-height: 44px;
+  font: 800 14px/1.3 "DM Sans", sans-serif;
+  letter-spacing: 0;
+}
+.degen-farm-card .bfc-harvest-btn:not(:disabled),
+.farm-claim-all-btn:not(:disabled) {
+  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 68%, #4f8ef7));
+  border-color: color-mix(in srgb, var(--accent) 54%, transparent);
+  color: #fff;
+  box-shadow: inset 0 1px 0 #ffffff1f;
+}
+.degen-farm-card .bfc-harvest-btn:hover:not(:disabled),
+.farm-claim-all-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 88%, #fff), var(--accent));
+  box-shadow: inset 0 1px 0 #ffffff1f;
+  transform: none;
+}
+.degen-farm-card .bfc-harvest-btn:disabled {
+  background: color-mix(in srgb, var(--fg) 5%, var(--panel));
+  border-color: var(--farm-border-soft);
+  color: color-mix(in srgb, var(--fg) 38%, var(--panel));
+  opacity: 1;
+}
+.degen-farm-card .bfc-input-row { gap: 0; position: relative; }
+.degen-farm-card .bfc-input-row .bfc-input {
+  min-height: 46px;
+  padding: 10px 65px 10px 12px;
+  font: 500 16px/1.4 "DM Sans", sans-serif;
+  border-radius: 6px;
+}
+.degen-farm-card .bfc-input-row > .bfc-max {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  bottom: 5px;
+  min-width: 48px;
+  padding: 0 8px;
+  border: none;
+  border-left: 1px solid var(--farm-border-soft);
+  border-radius: 0;
+  background: transparent;
+  font: 700 11px/1.3 "DM Sans", sans-serif;
+}
+.degen-farm-card .bfc-input { appearance: textfield; -moz-appearance: textfield; }
+.degen-farm-card .bfc-input::-webkit-inner-spin-button,
+.degen-farm-card .bfc-input::-webkit-outer-spin-button { appearance: none; margin: 0; }
+.degen-farm-card .bfc-action-grid button,
+.degen-farm-card .bfc-approve-btn {
+  min-height: 44px;
+  font: 600 14px/1.4 "DM Sans", sans-serif;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+.degen-farm-card .bfc-action-grid button:not(:disabled) { color: var(--fg); }
+.degen-farm-card .bfc-approve-btn {
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+  text-transform: none;
+  font-weight: 700;
+}
+.degen-farm-card .bfc-status:empty { display: none; }
+.degen-farm-card .bfc-bottom-line {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 0;
+  padding-top: 12px;
+  font: 500 13px/1.4 "DM Sans", sans-serif;
+  white-space: normal;
+}
+.degen-farm-card .bfc-bottom-line b { font-size: 14px; }
+.degen-farm-card .bfc-bottom-line > span:last-child { grid-column: 1 / -1; }
+.degen-farm-card :is(button, a, input):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+@media (max-width: 420px) {
+  .degen-farm-card .bfc-head { grid-template-columns: auto minmax(0, 1fr); }
+  .degen-farm-card .bfc-liquidity-btn { grid-column: 1 / -1; justify-self: start; }
+  .degen-farm-card .bfc-stat-cell { padding: 12px 10px; }
+  .degen-farm-card .bfc-rewards-cell .bfc-stat-reward-line { grid-template-columns: 14px minmax(0, 1fr); }
+  .degen-farm-card .bfc-rewards-cell .bfc-stat-reward-line > .farm-pop { grid-column: 2; justify-self: start; }
+}

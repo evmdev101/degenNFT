@@ -1,0 +1,24 @@
+.dash-recent-activity { margin-top: 24px; }
+.dash-activity-filters, .dash-activity-pagination { display: flex; flex-wrap: wrap; gap: 8px; }
+.dash-activity-filters { margin: 24px 0 16px; }
+.dashboard-main :is(.dash-activity-filters, .dash-activity-pagination) button {
+  min-height: 44px; padding: 9px 15px; border: 1px solid var(--border); border-radius: 6px;
+  color: var(--fg); background: transparent; font: 500 14px/1.4 'DM Sans', sans-serif; cursor: pointer;
+}
+.dashboard-main .dash-activity-filters button[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.dashboard-main :is(.dash-activity-filters, .dash-activity-pagination) button:not(:disabled):hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.dash-activity-list { max-height: 520px; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; padding-right: 5px; border-top: 1px solid var(--border); }
+.dash-activity-list > a { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 88px; padding: 18px 0; color: var(--fg); text-decoration: none; border-bottom: 1px solid var(--border); }
+.dash-activity-list > a:hover { background: color-mix(in srgb, var(--fg) 3%, transparent); }
+.dash-activity-list > a > div { min-width: 0; }
+.dash-activity-list strong { display: block; overflow-wrap: anywhere; font-size: 15px; }
+.dash-activity-list small { display: block; margin-top: 5px; color: var(--dash-muted); font-size: 13px; }
+.dash-activity-list > a > span { flex-shrink: 0; text-align: right; font-size: 14px; font-variant-numeric: tabular-nums; }
+.dash-activity-list > .dash-data-note { margin: 18px 0; }
+.dash-activity-pagination { margin-top: 20px; }
+@media (max-width: 600px) {
+  .dash-activity-filters { gap: 6px; }
+  .dashboard-main .dash-activity-filters button { padding-inline: 11px; font-size: 13px; }
+  .dash-activity-list > a { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .dash-activity-list > a > span { flex-shrink: 1; text-align: left; overflow-wrap: anywhere; }
+}

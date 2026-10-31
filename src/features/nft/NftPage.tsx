@@ -1,22 +1,27 @@
-import { useQuery } from "@tanstack/react-query";
-import { Contract, EventLog, ZeroAddress, formatEther } from "ethers";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChangingValue } from "../../components/ChangingValue";
+import { confirmTransaction } from "../../lib/transactions";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { Contract, Interface, ZeroAddress, formatEther, parseEther } from "ethers";
+import { useCallback, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { ScrollRegion } from "../../components/ScrollRegion";
 import type { WalletState } from "../../hooks/useWallet";
 import {
   CONTRACTS,
   MINT_ABI,
   NFT_ABI,
-  NFT_REWARDS_ABI,
   NFT_TOKEN_ID,
 } from "../../config/contracts";
 import {
   fetchTokenMetadata,
   getPublicContracts,
+  pulsechainRpcCall,
   readableError,
   shortAddress,
   toGatewayUrl,
 } from "../../lib/chain";
+import { PageActivity, usePageActive } from "../../hooks/usePageActive";
+import { HelpTip } from "../../components/HelpTip";
 import { RewardsActions } from "./RewardsActions";
 import { CashxArtwork } from "./CashxArtwork";
 
@@ -32,6 +37,8 @@ type MintEvent = {
 
 type MinerData = {
   loading: boolean;
+  walletLoading: boolean;
+  historyLoading: boolean;
   error: string;
   price: bigint;
   active: number;
@@ -46,18 +53,18 @@ type MinerData = {
   walletBalance: bigint;
   pendingOink: bigint;
   pendingDegen: bigint;
-  perNftOinkSecond: bigint;
-  perNftDegenSecond: bigint;
 };
 
 const initialData: MinerData = {
   loading: true,
+  walletLoading: true,
+  historyLoading: true,
   error: "",
   price: 0n,
   active: 0,
   minted: null,
   burned: null,
-  image: "",
+  image: "https://avatars.githubusercontent.com/u/211634181?s=400&u=9fe309d180b8809e8494e16da2d5c3882e2d4399&v=4",
   name: "DegenStrategy NFT Miner",
   description: "NFT Miner used to accrue OINK and DEGEN mining rewards",
   traits: 0,
@@ -66,201 +73,215 @@ const initialData: MinerData = {
   walletBalance: 0n,
   pendingOink: 0n,
   pendingDegen: 0n,
-  perNftOinkSecond: 0n,
-  perNftDegenSecond: 0n,
 };
 
-async function loadMinerData(address: string | null): Promise<MinerData> {
+async function loadMinerHistory() {
+  let events: MintEvent[] = [];
+  let holders: Holder[] = [];
+  let minted: number | null = null;
+  let burned: number | null = null;
   try {
-    const { nft, mint, provider } = await getPublicContracts();
-    const [price, active, rawUri] = await Promise.all([
+    const iface = new Interface(NFT_ABI);
+    const transferLogs = await pulsechainRpcCall<Array<{
+      topics: string[]; data: string; blockNumber: string; transactionHash: string;
+    }>>("eth_getLogs", [{
+      address: CONTRACTS.nft, fromBlock: "0x0", toBlock: "latest",
+      topics: [iface.getEvent("TransferSingle")!.topicHash],
+    }]);
+    const matchingTransfers = transferLogs.flatMap((log) => {
+      const decoded = iface.parseLog(log);
+      if (!decoded || BigInt(decoded.args.id) !== NFT_TOKEN_ID) return [];
+      return [{ args: decoded.args, blockNumber: Number(BigInt(log.blockNumber)),
+        transactionHash: log.transactionHash }];
+    });
+    const matchingMints = matchingTransfers.filter(
+      (log) =>
+        String(log.args.from).toLowerCase() === ZeroAddress.toLowerCase(),
+    );
+    const matchingBurns = matchingTransfers.filter(
+      (log) =>
+        String(log.args.to).toLowerCase() === ZeroAddress.toLowerCase(),
+    );
+    minted = matchingMints.reduce(
+      (sum, log) => sum + Number(log.args.value),
+      0,
+    );
+    burned = matchingBurns.reduce(
+      (sum, log) => sum + Number(log.args.value),
+      0,
+    );
+    events = matchingMints
+      .map((log) => ({
+        address: String(log.args.to),
+        quantity: Number(log.args.value),
+        blockNumber: log.blockNumber,
+        transactionHash: log.transactionHash,
+      }))
+      .sort((a, b) => b.blockNumber - a.blockNumber);
+
+    const balances = new Map<string, number>();
+    for (const log of matchingTransfers) {
+      const from = String(log.args.from).toLowerCase();
+      const to = String(log.args.to).toLowerCase();
+      const value = Number(log.args.value);
+      if (from !== ZeroAddress.toLowerCase())
+        balances.set(from, (balances.get(from) || 0) - value);
+      if (to !== ZeroAddress.toLowerCase())
+        balances.set(to, (balances.get(to) || 0) + value);
+    }
+    holders = [...balances.entries()]
+      .filter(([, value]) => value > 0)
+      .map(([holderAddress, value]) => ({
+        address: holderAddress,
+        value,
+      }))
+      .sort((a, b) => b.value - a.value);
+  } catch (eventError) {
+    console.warn("Event history unavailable:", eventError);
+  }
+
+  if (!holders.length) {
+    try {
+      const response = await fetch(
+        `https://api.scan.pulsechain.com/api?module=token&action=getTokenHolders&contractaddress=${CONTRACTS.nft}&offset=200&page=1`,
+      );
+      const payload = (await response.json()) as {
+        result?: Array<{ address?: string; value?: string }>;
+      };
+      holders = (payload.result || [])
+        .map((item) => ({
+          address: String(item.address || ""),
+          value: Number(item.value || 0),
+        }))
+        .filter(
+          (item) =>
+            /^0x[0-9a-f]{40}$/i.test(item.address) && item.value > 0,
+        )
+        .sort((a, b) => b.value - a.value);
+    } catch (holderError) {
+      console.warn("Holder index unavailable:", holderError);
+    }
+  }
+
+
+  return { events, holders, minted, burned };
+}
+
+const overviewOptions = {
+  queryKey: ["nft-overview"],
+  queryFn: async () => {
+    const { nft, mint } = await getPublicContracts();
+    const [price, active] = await Promise.all([
       mint.nftPrice() as Promise<bigint>,
       nft.totalNFTs() as Promise<bigint>,
-      nft.uri(NFT_TOKEN_ID) as Promise<string>,
     ]);
-    const metadata = await fetchTokenMetadata(
-      rawUri.replace("{id}", NFT_TOKEN_ID.toString(16).padStart(64, "0")),
-    );
-    const image = toGatewayUrl(metadata.image || "");
+    return { price, active: Number(active) };
+  },
+  staleTime: 30_000,
+  refetchInterval: 60_000,
+};
 
-      let events: MintEvent[] = [];
-      let holders: Holder[] = [];
-      let minted: number | null = null;
-      let burned: number | null = null;
-      try {
-        const transferLogs = await nft.queryFilter(
-          nft.filters.TransferSingle(null, null, null),
-        );
-        const matchingTransfers = transferLogs.filter(
-          (log) =>
-            log instanceof EventLog && BigInt(log.args.id) === NFT_TOKEN_ID,
-        ) as EventLog[];
-        const matchingMints = matchingTransfers.filter(
-          (log) =>
-            String(log.args.from).toLowerCase() === ZeroAddress.toLowerCase(),
-        );
-        const matchingBurns = matchingTransfers.filter(
-          (log) =>
-            String(log.args.to).toLowerCase() === ZeroAddress.toLowerCase(),
-        );
-        minted = matchingMints.reduce(
-          (sum, log) => sum + Number(log.args.value),
-          0,
-        );
-        burned = matchingBurns.reduce(
-          (sum, log) => sum + Number(log.args.value),
-          0,
-        );
-        events = matchingMints
-          .map((log) => ({
-            address: String(log.args.to),
-            quantity: Number(log.args.value),
-            blockNumber: log.blockNumber,
-            transactionHash: log.transactionHash,
-          }))
-          .sort((a, b) => b.blockNumber - a.blockNumber)
-          .slice(0, 50);
-        const timedEvents = await Promise.all(
-          events.slice(0, 25).map(async (event) => {
-            try {
-              const block = await provider.getBlock(event.blockNumber);
-              return {
-                ...event,
-                timestamp: block ? Number(block.timestamp) : undefined,
-              };
-            } catch {
-              return event;
-            }
-          }),
-        );
-        events = [...timedEvents, ...events.slice(25)];
+const uriOptions = {
+  queryKey: ["nft-uri"],
+  queryFn: async () => {
+    const { nft } = await getPublicContracts();
+    return nft.uri(NFT_TOKEN_ID) as Promise<string>;
+  },
+  staleTime: 5 * 60_000,
+};
 
-        const balances = new Map<string, number>();
-        for (const log of matchingTransfers) {
-          const from = String(log.args.from).toLowerCase();
-          const to = String(log.args.to).toLowerCase();
-          const value = Number(log.args.value);
-          if (from !== ZeroAddress.toLowerCase())
-            balances.set(from, (balances.get(from) || 0) - value);
-          if (to !== ZeroAddress.toLowerCase())
-            balances.set(to, (balances.get(to) || 0) + value);
-        }
-        holders = [...balances.entries()]
-          .filter(([, value]) => value > 0)
-          .map(([holderAddress, value]) => ({
-            address: holderAddress,
-            value,
-          }))
-          .sort((a, b) => b.value - a.value);
-      } catch (eventError) {
-        console.warn("Event history unavailable:", eventError);
-      }
+const metadataOptions = (uri: string) => ({
+  queryKey: ["nft-metadata", uri],
+  queryFn: () => fetchTokenMetadata(
+    uri.replace("{id}", NFT_TOKEN_ID.toString(16).padStart(64, "0")),
+  ),
+  staleTime: Infinity,
+});
 
-      if (!holders.length) {
-        try {
-          const response = await fetch(
-            `https://api.scan.pulsechain.com/api?module=token&action=getTokenHolders&contractaddress=${CONTRACTS.nft}&offset=200&page=1`,
-          );
-          const payload = (await response.json()) as {
-            result?: Array<{ address?: string; value?: string }>;
-          };
-          holders = (payload.result || [])
-            .map((item) => ({
-              address: String(item.address || ""),
-              value: Number(item.value || 0),
-            }))
-            .filter(
-              (item) =>
-                /^0x[0-9a-f]{40}$/i.test(item.address) && item.value > 0,
-            )
-            .sort((a, b) => b.value - a.value);
-        } catch (holderError) {
-          console.warn("Holder index unavailable:", holderError);
-        }
-      }
+const walletOptions = (address: string | null) => ({
+  queryKey: ["nft-wallet", address?.toLowerCase() ?? "guest"],
+  enabled: Boolean(address),
+  staleTime: 15_000,
+  refetchInterval: 60_000,
+  queryFn: async () => {
+    const { nft } = await getPublicContracts();
+    const [walletBalance, pending] = await Promise.all([
+      nft.balanceOf(address, NFT_TOKEN_ID) as Promise<bigint>,
+      nft.viewUserTotalEarnings(address) as Promise<[bigint, bigint]>,
+    ]);
+    return { walletBalance, pendingOink: pending[0], pendingDegen: pending[1] };
+  },
+});
 
-      let walletBalance = 0n,
-        pendingOink = 0n,
-        pendingDegen = 0n,
-        perNftOinkSecond = 0n,
-        perNftDegenSecond = 0n;
-      if (address) {
-        walletBalance = (await nft.balanceOf(address, NFT_TOKEN_ID)) as bigint;
-        const pending = (await nft.viewUserTotalEarnings(address)) as [
-          bigint,
-          bigint,
-        ];
-        pendingOink = pending[0];
-        pendingDegen = pending[1];
-      }
-      const rateAddress = address || events[0]?.address;
-      if (rateAddress) {
-        try {
-          const rateBalance = (await nft.balanceOf(
-            rateAddress,
-            NFT_TOKEN_ID,
-          )) as bigint;
-          if (rateBalance > 0n) {
-            const rewards = new Contract(
-              CONTRACTS.rewards,
-              NFT_REWARDS_ABI,
-              provider,
-            );
-            const rates = await rewards.getEarnings(rateAddress);
-            perNftOinkSecond = BigInt(rates.oinkRate) / 3n / rateBalance;
-            perNftDegenSecond = BigInt(rates.degenRate) / 3n / rateBalance;
-          }
-        } catch (rateError) {
-          console.warn("Reward rates unavailable:", rateError);
-        }
-      }
-    return {
-      loading: false,
-      error: "",
-      price,
-      active: Number(active),
-      minted,
-      burned,
-      image,
-      name: metadata.name || initialData.name,
-      description: metadata.description || initialData.description,
-      traits: metadata.attributes?.length || 0,
-      events,
-      holders,
-      walletBalance,
-      pendingOink,
-      pendingDegen,
-      perNftOinkSecond,
-      perNftDegenSecond,
-    };
-  } catch (error) {
-    throw new Error(readableError(error), { cause: error });
-  }
+export async function prefetchNftData(client: QueryClient, address: string | null) {
+  await Promise.all([
+    client.prefetchQuery(overviewOptions),
+    client.prefetchQuery(uriOptions),
+    address ? client.prefetchQuery(walletOptions(address)) : Promise.resolve(),
+  ]);
+  const uri = client.getQueryData<string>(uriOptions.queryKey);
+  if (uri) await client.prefetchQuery(metadataOptions(uri));
 }
 
 function useMinerData(address: string | null) {
-  const query = useQuery({
-    queryKey: ["nft-miner-data", address ?? "guest"],
-    queryFn: () => loadMinerData(address),
-    refetchInterval: 60_000,
+  const pageActive = usePageActive();
+  const overview = useQuery({ ...overviewOptions, enabled: pageActive });
+  const uri = useQuery({ ...uriOptions, enabled: pageActive });
+  const metadata = useQuery({
+    ...metadataOptions(uri.data ?? ""),
+    enabled: pageActive && Boolean(uri.data),
   });
-
-  const data = query.data
-    ? {
-        ...query.data,
-        loading: query.isPending,
-        error: query.error ? readableError(query.error) : "",
-      }
-    : {
-        ...initialData,
-        loading: query.isPending,
-        error: query.error ? readableError(query.error) : "",
-      };
-
+  const history = useQuery({
+    queryKey: ["nft-history"],
+    queryFn: loadMinerHistory,
+    enabled: pageActive && Boolean(overview.data),
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
+  });
+  const blocks = [...new Set(history.data?.events.slice(0, 25).map((event) => event.blockNumber) ?? [])];
+  const timestamps = useQuery({
+    queryKey: ["nft-mint-timestamps", blocks],
+    enabled: pageActive && blocks.length > 0,
+    staleTime: Infinity,
+    queryFn: async () => {
+      const { provider } = await getPublicContracts();
+      const entries = await Promise.all(blocks.map(async (number) => {
+        try {
+          const block = await provider.getBlock(number);
+          return [number, block?.timestamp] as const;
+        } catch {
+          return [number, undefined] as const;
+        }
+      }));
+      return Object.fromEntries(entries) as Record<number, number | undefined>;
+    },
+  });
+  // Public history and metadata never hold up wallet balances or the page.
+  const account = useQuery({ ...walletOptions(address), enabled: pageActive && Boolean(address) });
+  const error = overview.error || (address ? account.error : null);
+  const data: MinerData = {
+    ...initialData,
+    ...overview.data,
+    ...history.data,
+    events: (history.data?.events ?? []).map((event) => ({
+      ...event, timestamp: timestamps.data?.[event.blockNumber],
+    })),
+    loading: !overview.data,
+    walletLoading: Boolean(address) && !account.data,
+    historyLoading: history.isPending,
+    error: error ? readableError(error) : "",
+    image: metadata.data?.image ? toGatewayUrl(metadata.data.image) : initialData.image,
+    name: metadata.data?.name || initialData.name,
+    description: metadata.data?.description || initialData.description,
+    traits: metadata.data?.attributes?.length || 0,
+    walletBalance: address ? account.data?.walletBalance ?? 0n : 0n,
+    pendingOink: address ? account.data?.pendingOink ?? 0n : 0n,
+    pendingDegen: address ? account.data?.pendingDegen ?? 0n : 0n,
+  };
   const reload = useCallback(async () => {
-    await query.refetch();
-  }, [query.refetch]);
-
+    void history.refetch();
+    await Promise.all([overview.refetch(), account.refetch()]);
+  }, [overview.refetch, account.refetch, history.refetch]);
   return { data, reload };
 }
 
@@ -272,142 +293,86 @@ const formatToken = (value: bigint) =>
   Number(formatEther(value)).toLocaleString(undefined, {
     maximumFractionDigits: 6,
   });
-const APR_BLOCKS_PER_YEAR = 3_061_747;
-const NFT_PRICE_USD = 50;
-const OINK_PRICE_PAIR = "0xef9ea3d72e28c7140481209190601c085027d6fe";
-const DEGEN_PRICE_PAIR = "0x3029aa801176f6904e2b6c7527334c215eaf1d8f";
-
-async function fetchPairPrice(address: string) {
-  const response = await fetch(
-    `https://api.dexscreener.com/latest/dex/pairs/pulsechain/${address}`,
-  );
-  if (!response.ok) throw new Error("Live token prices are unavailable.");
-  const payload = (await response.json()) as {
-    pairs?: Array<{ priceUsd?: string; priceNative?: string }>;
-  };
-  return payload.pairs?.[0];
-}
-
-function useRewardsApr(oinkPerNftSecond: bigint, degenPerNftSecond: bigint) {
-  const query = useQuery({
-    queryKey: [
-      "nft-rewards-apr",
-      oinkPerNftSecond.toString(),
-      degenPerNftSecond.toString(),
-    ],
-    enabled: oinkPerNftSecond > 0n || degenPerNftSecond > 0n,
-    staleTime: 5 * 60 * 1_000,
-    refetchInterval: 5 * 60 * 1_000,
-    queryFn: async () => {
-      const [oinkPair, degenPair] = await Promise.all([
-        fetchPairPrice(OINK_PRICE_PAIR),
-        fetchPairPrice(DEGEN_PRICE_PAIR),
-      ]);
-      const oinkUsd = Number(oinkPair?.priceUsd || 0);
-      const degenUsd = Number(degenPair?.priceNative || 0) * oinkUsd;
-      if (!(oinkUsd > 0) || !(degenUsd > 0))
-        throw new Error("Live token prices are unavailable.");
-      const rawOinkRate = oinkPerNftSecond * 3n;
-      const rawDegenRate = degenPerNftSecond * 3n;
-      const annualOink =
-        Number(formatEther(rawOinkRate)) * APR_BLOCKS_PER_YEAR;
-      const annualDegen =
-        Number(formatEther(rawDegenRate)) * APR_BLOCKS_PER_YEAR;
-      const annualUsd = annualOink * oinkUsd + annualDegen * degenUsd;
-      return (annualUsd / NFT_PRICE_USD) * 100;
-    },
-  });
-  return query.data && query.data > 0
-    ? `${Math.round(query.data).toLocaleString()}%`
-    : "—";
-}
-
 export function NftPage({ wallet }: { wallet: WalletState }) {
   const [tab, setTab] = useState<NftTab>("mint");
+  const [visited, setVisited] = useState<NftTab[]>(["mint"]);
+  const selectTab = (next: NftTab) => { setTab(next); setVisited(current => current.includes(next) ? current : [...current, next]); };
   const [quantity, setQuantity] = useState(1);
-  const [cost, setCost] = useState(0n);
+  const queryClient = useQueryClient();
+  const mintLock = useRef(false);
+  const pageActive = usePageActive();
   const [txStatus, setTxStatus] = useState("");
   const [txPending, setTxPending] = useState(false);
   const { data, reload } = useMinerData(wallet.address);
 
-  useEffect(() => {
-    if (!data.price) return;
-    let cancelled = false;
-    void getPublicContracts()
-      .then(
-        ({ mint }) =>
-          mint.priceWithDiscount(
-            BigInt(quantity),
-            data.price,
-          ) as Promise<bigint>,
-      )
-      .then((value) => {
-        if (!cancelled) setCost(value);
-      })
-      .catch(() => {
-        if (!cancelled) setCost(data.price * BigInt(quantity));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [quantity, data.price]);
+  const quoteKey = ["nft-purchase-quote", quantity, data.price.toString()];
+  const quote = useQuery({
+    queryKey: quoteKey,
+    enabled: pageActive && data.price > 0n,
+    staleTime: 30_000,
+    queryFn: async () => (await getPublicContracts()).mint.priceWithDiscount(BigInt(quantity), data.price) as Promise<bigint>,
+  });
+  const cost = quote.data ?? 0n;
 
   const mint = async () => {
+    if (mintLock.current) return;
     if (!wallet.isConnected) {
       await wallet.connect();
       return;
     }
+    mintLock.current = true;
     setTxPending(true);
-    setTxStatus("Waiting for wallet confirmation…");
+    setTxStatus("");
     try {
       const signer = await wallet.getSigner();
       const contract = new Contract(CONTRACTS.mint, MINT_ABI, signer);
-      const balance = await signer.provider.getBalance(
-        await signer.getAddress(),
-      );
-      if (balance < cost)
-        throw new Error(`Insufficient PLS. You need ${formatPls(cost)} PLS.`);
+      const [freshPrice, balance, fee] = await Promise.all([
+        contract.nftPrice() as Promise<bigint>,
+        signer.provider.getBalance(await signer.getAddress()),
+        signer.provider.getFeeData(),
+      ]);
+      const freshCost: bigint = await contract.priceWithDiscount(BigInt(quantity), freshPrice);
+      if (freshCost !== cost) {
+        queryClient.setQueryData(quoteKey, freshCost);
+        throw new Error("The price changed. Check the updated total and choose Mint again.");
+      }
+      if (freshCost <= 0n) throw new Error("Mint price is unavailable.");
+      await contract.buyWithPLS.staticCall(BigInt(quantity), { value: freshCost });
+      const gas = await contract.buyWithPLS.estimateGas(BigInt(quantity), { value: freshCost });
+      const gasPrice = fee.maxFeePerGas ?? fee.gasPrice;
+      if (!gasPrice) throw new Error("Network fee is unavailable. Please try again shortly.");
+      if (balance < freshCost + gas * gasPrice * 120n / 100n)
+        throw new Error("Keep enough PLS for the purchase and network fee.");
+      await wallet.getSigner();
       const transaction = await contract.buyWithPLS(BigInt(quantity), {
-        value: cost,
+        value: freshCost,
       });
-      setTxStatus("Transaction submitted. Waiting for confirmation…");
-      await transaction.wait();
-      setTxStatus(
-        `Success! Transaction ${transaction.hash.slice(0, 10)}… confirmed.`,
-      );
-      await reload();
+
+      await confirmTransaction(transaction);
+      setTxStatus("");
+      await reload().catch(() => undefined);
     } catch (error) {
       setTxStatus(readableError(error));
     } finally {
+      mintLock.current = false;
       setTxPending(false);
     }
   };
 
-  if (data.loading) {
-    return (
-      <main className="nft-page nft-page-loading" aria-busy="true">
-        <div className="nft-loading-message" role="status" aria-live="polite">
-          <span className="nft-loading-spinner" aria-hidden="true" />
-          Loading NFT data…
-        </div>
-      </main>
-    );
-  }
-
   return (
-    <main className="nft-page">
+    <main className="nft-page" aria-busy={data.loading}>
       <section className="overview-section">
         <h1>Mint Overview</h1>
         <div className="overview-grid">
           <Metric
             label="Price per NFT"
-            value={data.price ? formatPls(data.price, 2) : "Loading…"}
+            value={data.price ? formatPls(data.price, 2) : "—"}
             unit="PLS"
             note="Paid in native PLS"
           />
           <Metric
             label="Active Miners"
-            value={data.active.toLocaleString()}
+            value={data.loading ? "—" : data.active.toLocaleString()}
             unit="miners"
             note="Currently earning rewards"
           />
@@ -439,7 +404,7 @@ export function NftPage({ wallet }: { wallet: WalletState }) {
           <button
             key={key}
             className={tab === key ? "active" : ""}
-            onClick={() => setTab(key)}
+            onClick={() => selectTab(key)}
           >
             {label}
           </button>
@@ -447,32 +412,21 @@ export function NftPage({ wallet }: { wallet: WalletState }) {
       </nav>
 
       {data.error && <div className="panel-message error">{data.error}</div>}
-      {tab === "mint" && (
-        <MintPanel
-          data={data}
-          quantity={quantity}
-          setQuantity={setQuantity}
-          cost={cost}
-          txPending={txPending}
-          txStatus={txStatus}
-          wallet={wallet}
-          onMint={() => void mint()}
-        />
-      )}
-      {tab === "rewards" && (
-        <RewardsPanel data={data} wallet={wallet} reload={reload} />
-      )}
-      {tab === "calculator" && (
-        <CalculatorPanel
-          price={data.price}
-          oinkRate={data.perNftOinkSecond}
-          degenRate={data.perNftDegenSecond}
-        />
-      )}
-      {tab === "holders" && (
-        <HoldersPanel holders={data.holders} image={data.image} />
-      )}
-      {tab === "activity" && <ActivityPanel events={data.events} />}
+      <div className="nft-tab-panel" hidden={tab !== "mint"}>
+        <MintPanel data={data} quantity={quantity} setQuantity={setQuantity}
+          cost={cost} txPending={txPending} txStatus={txStatus}
+          wallet={wallet} onMint={() => void mint()} />
+      </div>
+      {visited.includes("rewards") && <div className="nft-tab-panel" hidden={tab !== "rewards"}>
+        <PageActivity.Provider value={pageActive && tab === "rewards"}>
+          <RewardsPanel data={data} wallet={wallet} reload={reload} />
+        </PageActivity.Provider>
+      </div>}
+      {visited.includes("calculator") && <div className="nft-tab-panel" hidden={tab !== "calculator"}>
+        <PageActivity.Provider value={pageActive && tab === "calculator"}><CalculatorPanel price={data.price} /></PageActivity.Provider>
+      </div>}
+      {visited.includes("holders") && <div className="nft-tab-panel" hidden={tab !== "holders"}><HoldersPanel holders={data.holders} image={data.image} /></div>}
+      {visited.includes("activity") && <div className="nft-tab-panel" hidden={tab !== "activity"}><ActivityPanel events={data.events} /></div>}
     </main>
   );
 }
@@ -493,7 +447,7 @@ function Metric({
       <span>{label}</span>
       <div className="metric-value-row">
         <strong className={value.length > 9 ? "is-long" : undefined}>
-          {value}
+          <ChangingValue value={value === "—" ? undefined : value}>{value}</ChangingValue>
         </strong>
         {unit && <em>{unit}</em>}
       </div>
@@ -606,7 +560,7 @@ function MintPanel({
                 onClick={onMint}
               >
                 {txPending
-                  ? "Transaction pending"
+                  ? "Minting…"
                   : wallet.isConnected
                     ? `Mint ${quantity} NFT${quantity > 1 ? "s" : ""}`
                     : "Connect Wallet"}
@@ -618,13 +572,13 @@ function MintPanel({
         <section className="recent-mints">
           <div className="recent-mints-title">
             <h3>Live Mints</h3>
-            <small>Updates automatically</small>
+
           </div>
           <div className="recent-mints-scroll">
             <div className="recent-mints-table">
               <div className="recent-mints-header" aria-hidden="true">
                 <span>Minter</span>
-                <span>Price</span>
+                <span>Asset</span>
                 <span>Qty</span>
                 <span>Time</span>
               </div>
@@ -645,7 +599,7 @@ function MintPanel({
                       <small>DegenStrategy #1</small>
                     </div>
                     <strong>
-                      {data.price ? `${formatPls(data.price, 1)} PLS` : "—"}
+                      NFT #1
                     </strong>
                     <span>{event.quantity}</span>
                     <a
@@ -662,7 +616,7 @@ function MintPanel({
             </div>
           </div>
           {!data.events.length && (
-            <p>No recent events available from the current RPC.</p>
+            <p>{data.historyLoading ? "Loading recent mints…" : "No recent events available from the current RPC."}</p>
           )}
           <div className="nft-contract-line">
             <span>NFT Contract:</span>
@@ -670,7 +624,6 @@ function MintPanel({
               href={`https://scan.pulsechain.com/address/${CONTRACTS.nft}`}
               target="_blank"
               rel="noreferrer"
-              title={CONTRACTS.nft}
             >
               {contractPreview}
             </a>
@@ -682,7 +635,6 @@ function MintPanel({
                   ? "NFT contract copied"
                   : "Copy NFT contract address"
               }
-              title="Copy NFT contract address"
               onClick={() => void copyNftContract()}
             >
               {contractCopied ? "Copied" : "⧉"}
@@ -703,51 +655,9 @@ function RewardsPanel({
   wallet: WalletState;
   reload: () => Promise<void>;
 }) {
-  const [showCompounded, setShowCompounded] = useState(
-    () => localStorage.getItem("degen-compounded") !== "false",
-  );
-  const [elapsedMs, setElapsedMs] = useState(0);
-  useEffect(() => {
-    const syncPreference = () =>
-      setShowCompounded(
-        localStorage.getItem("degen-compounded") !== "false",
-      );
-    window.addEventListener("degen-compounded-change", syncPreference);
-    return () =>
-      window.removeEventListener(
-        "degen-compounded-change",
-        syncPreference,
-      );
-  }, []);
-  useEffect(() => {
-    setElapsedMs(0);
-    if (!showCompounded) return;
-    const startedAt = Date.now();
-    const timer = window.setInterval(
-      () => setElapsedMs(Date.now() - startedAt),
-      100,
-    );
-    return () => window.clearInterval(timer);
-  }, [
-    showCompounded,
-    data.pendingOink,
-    data.pendingDegen,
-    data.perNftOinkSecond,
-    data.perNftDegenSecond,
-    data.walletBalance,
-  ]);
-  const elapsed = BigInt(Math.floor(elapsedMs));
-  const displayedOink =
-    data.pendingOink +
-    (data.perNftOinkSecond * data.walletBalance * elapsed) / 1_000n;
-  const displayedDegen =
-    data.pendingDegen +
-    (data.perNftDegenSecond * data.walletBalance * elapsed) / 1_000n;
-  const apr = useRewardsApr(
-    data.perNftOinkSecond,
-    data.perNftDegenSecond,
-  );
 
+  const displayedOink = data.pendingOink;
+  const displayedDegen = data.pendingDegen;
   if (!wallet.isConnected)
     return (
       <section className="feature-panel empty-state">
@@ -781,7 +691,7 @@ function RewardsPanel({
             </div>
             <div>
               <dt>Owned</dt>
-              <dd>{data.walletBalance.toString()}x</dd>
+              <dd>{data.walletLoading ? "—" : `${data.walletBalance.toString()}x`}</dd>
             </div>
             <div>
               <dt>Traits</dt>
@@ -801,7 +711,7 @@ function RewardsPanel({
         <header className="rewards-console-header">
           <h2>Mining Rewards</h2>
           <div>
-            <strong>{data.walletBalance.toString()}</strong>
+            <strong>{data.walletLoading ? "—" : data.walletBalance.toString()}</strong>
             <span>
               NFT Miner{data.walletBalance === 1n ? "" : "s"} Held
             </span>
@@ -810,25 +720,12 @@ function RewardsPanel({
         <div className="rewards-token-grid">
           <article>
             <span>OINK Pending</span>
-            <strong>{formatToken(displayedOink)}</strong>
+            <strong>{data.walletLoading ? "—" : formatToken(displayedOink)}</strong>
           </article>
           <article>
             <span>DEGEN Pending</span>
-            <strong>{formatToken(displayedDegen)}</strong>
+            <strong>{data.walletLoading ? "—" : formatToken(displayedDegen)}</strong>
           </article>
-        </div>
-        <div className="rewards-apr">
-          <span>Current APR:</span>
-          <strong>{apr}</strong>
-          <span
-            className="rewards-apr-info"
-            title="Estimated from current reward rates, live OINK and DEGEN prices, and the original $50 NFT valuation."
-          >
-            ⓘ
-          </span>
-          <small>
-            {showCompounded ? "live compounded" : "on-chain snapshot"}
-          </small>
         </div>
         <RewardsActions
           dashboard
@@ -847,21 +744,30 @@ const MAX_CALCULATOR_MINERS = 5_000;
 
 function CalculatorPanel({
   price,
-  oinkRate,
-  degenRate,
 }: {
   price: bigint;
-  oinkRate: bigint;
-  degenRate: bigint;
 }) {
   const [quantity, setQuantity] = useState(1);
-  const full = price * BigInt(quantity);
-  const total = quantity >= 10 ? (full * 97n) / 100n : full;
-  const projected = (rate: bigint, seconds: number) =>
-    formatToken(rate * BigInt(seconds) * BigInt(quantity));
+  const pageActive = usePageActive();
+  const [dailyOink, setDailyOink] = useState("");
+  const [dailyDegen, setDailyDegen] = useState("");
+  const quote = useQuery({
+    queryKey: ["nft-calculator-quote", quantity, price.toString()],
+    enabled: pageActive && price > 0n,
+    queryFn: async () => (await getPublicContracts()).mint.priceWithDiscount(BigInt(quantity), price) as Promise<bigint>,
+    staleTime: 60_000,
+  });
+  const total = quote.data;
+  const projected = (amount: string, days: number) => {
+    try {
+      if (!amount.trim()) return "—";
+      const raw = parseEther(amount);
+      return raw >= 0n ? formatToken(raw * BigInt(days) * BigInt(quantity)) : "—";
+    } catch { return "—"; }
+  };
   return (
     <section className="feature-panel">
-      <span className="eyebrow">Live on-chain planning tool</span>
+      <span className="eyebrow">Planning tool</span>
       <h2>Yield Calculator</h2>
       <div className="calculator-layout">
         <div>
@@ -890,31 +796,31 @@ function CalculatorPanel({
         <div className="total-card">
           <span>Estimated purchase cost</span>
           <strong>{total ? `${formatPls(total)} PLS` : "—"}</strong>
-          {quantity >= 10 && <small>3% bulk discount included</small>}
+          <small>Contract purchase quote; excludes network fees</small>
         </div>
+      </div>
+      <div className="calculator-assumptions">
+        <label>Assumed daily OINK per NFT<input inputMode="decimal" value={dailyOink} onChange={e => setDailyOink(e.target.value)} placeholder="Enter a daily estimate" /></label>
+        <label>Assumed daily DEGEN per NFT<input inputMode="decimal" value={dailyDegen} onChange={e => setDailyDegen(e.target.value)} placeholder="Enter a daily estimate" /></label>
       </div>
       <div className="projection-grid">
         <article>
           <span>Daily</span>
-          <b>{projected(oinkRate, 86400)} OINK</b>
-          <b>{projected(degenRate, 86400)} DEGEN</b>
+          <b>{projected(dailyOink, 1)} OINK</b>
+          <b>{projected(dailyDegen, 1)} DEGEN</b>
         </article>
         <article>
           <span>30 Days</span>
-          <b>{projected(oinkRate, 2592000)} OINK</b>
-          <b>{projected(degenRate, 2592000)} DEGEN</b>
+          <b>{projected(dailyOink, 30)} OINK</b>
+          <b>{projected(dailyDegen, 30)} DEGEN</b>
         </article>
         <article>
           <span>365 Days</span>
-          <b>{projected(oinkRate, 31536000)} OINK</b>
-          <b>{projected(degenRate, 31536000)} DEGEN</b>
+          <b>{projected(dailyOink, 365)} OINK</b>
+          <b>{projected(dailyDegen, 365)} DEGEN</b>
         </article>
       </div>
-      {oinkRate === 0n && degenRate === 0n && (
-        <p className="migration-note">
-          Live reward rates are temporarily unavailable from the current RPC.
-        </p>
-      )}
+      <p className="migration-note">Scenario estimate <HelpTip label="yield estimates">Uses your daily estimates at a constant rate. It excludes compounding, claim penalties, network fees, and future rate changes. The contract reward return has no verified time unit, so it is not presented as live APR.</HelpTip></p>
     </section>
   );
 }
@@ -941,9 +847,9 @@ function HoldersPanel({
         <span>% Owned</span>
         <span>Items</span>
       </div>
-      <div
+      <ScrollRegion
         className="cashx-holder-scroll"
-        aria-label="Holder wallets with more available by scrolling"
+        label="NFT holder wallets"
       >
         {holders.map((holder) => (
             <div className="cashx-holder-row" key={holder.address}>
@@ -971,7 +877,6 @@ function HoldersPanel({
                   <img
                     src={image}
                     alt="DegenStrategy NFT Miner"
-                    title="DegenStrategy NFT Miner"
                     loading="lazy"
                   />
                 ) : (
@@ -986,7 +891,7 @@ function HoldersPanel({
             Holder balances are temporarily unavailable.
           </div>
         )}
-      </div>
+      </ScrollRegion>
       <div className="cashx-holder-footer">
         {`${holders.length.toLocaleString()} holders · ${total.toLocaleString()} active NFTs`}
       </div>
@@ -995,16 +900,17 @@ function HoldersPanel({
 }
 
 function ActivityPanel({ events }: { events: MintEvent[] }) {
-  const recentEvents = events.slice(0, 25);
+  const [visible, setVisible] = useState(25);
+  const recentEvents = events.slice(0, visible);
   return (
     <section className="cashx-activity" aria-label="Recent NFT mints">
       <div className="cashx-activity-heading">
         <h2>Recent Mints</h2>
         <span>{recentEvents.length.toLocaleString()} events</span>
       </div>
-      <div
+      <ScrollRegion
         className="cashx-activity-scroll"
-        aria-label="Latest mint events with more available by scrolling"
+        label="Latest NFT mint events"
       >
         {recentEvents.map((event) => (
           <article className="cashx-activity-row" key={event.transactionHash}>
@@ -1041,7 +947,8 @@ function ActivityPanel({ events }: { events: MintEvent[] }) {
             Activity is temporarily unavailable from the current RPC.
           </div>
         )}
-      </div>
+      </ScrollRegion>
+      {visible < events.length && <button type="button" onClick={() => setVisible(count => count + 25)}>Show more</button>}
     </section>
   );
 }

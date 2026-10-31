@@ -1,0 +1,30 @@
+.scroll-region-shell { min-width: 0; }
+.scroll-region {
+  min-width: 0;
+  max-height: min(68vh, 44rem);
+  max-height: min(68dvh, 44rem);
+  overflow: auto;
+  /* Keep the page reachable when the list reaches either end. */
+  overscroll-behavior: auto;
+  scrollbar-gutter: stable;
+  scrollbar-color: color-mix(in srgb, var(--accent) 60%, var(--fg)) var(--panel);
+  scrollbar-width: auto;
+  scroll-padding: 8px;
+}
+.scroll-region-content { min-width: 0; }
+.scroll-region:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+.scroll-region::-webkit-scrollbar { width: 10px; height: 10px; }
+.scroll-region::-webkit-scrollbar-track { background: var(--panel); border-radius: 8px; }
+.scroll-region::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--accent) 60%, var(--fg));
+  border: 2px solid var(--panel);
+  border-radius: 8px;
+}
+.scroll-region-shell > .scroll-region-hint {
+  margin: 8px 0 0;
+  color: color-mix(in srgb, var(--fg) 80%, var(--panel));
+  font: 400 0.75rem/1.5 "DM Sans", sans-serif;
+  text-align: right;
+}
+/* The table's one scroll owner handles both axes, keeping its header nearby. */
+.scroll-region th { position: sticky; top: 0; z-index: 2; background: var(--panel); }

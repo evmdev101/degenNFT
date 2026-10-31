@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import { PageActivity, usePageActive } from "../hooks/usePageActive";
 import { useSearchParams } from "react-router-dom";
 import type { WalletState } from "../hooks/useWallet";
 import { MinersPage } from "./MinersPage";
@@ -16,6 +18,11 @@ export function MinersHubPage({ wallet }: { wallet: WalletState }) {
     requestedTab === "referral"
       ? requestedTab
       : "my-miners";
+
+  const pageActive = usePageActive();
+  const [visited, setVisited] = useState<MinerHubTab[]>([activeTab]);
+  useEffect(() => { setVisited(previous => previous.includes(activeTab) ? previous : [...previous, activeTab]); }, [activeTab]);
+  const visibleTabs = visited.includes(activeTab) ? visited : [...visited, activeTab];
 
   const selectTab = (tab: MinerHubTab) => {
     const nextParams = new URLSearchParams(searchParams);
@@ -80,37 +87,13 @@ export function MinersHubPage({ wallet }: { wallet: WalletState }) {
         </button>
       </nav>
 
-      <div
-        id={
-          activeTab === "deploy"
-            ? "deploy-miners-panel"
-            : activeTab === "sale"
-              ? "degen-miner-sale-panel"
-              : activeTab === "referral"
-                ? "miner-referral-panel"
-              : "my-miners-panel"
-        }
-        role="tabpanel"
-        aria-labelledby={
-          activeTab === "deploy"
-            ? "deploy-miners-tab"
-            : activeTab === "sale"
-              ? "degen-miner-sale-tab"
-              : activeTab === "referral"
-                ? "miner-referral-tab"
-              : "my-miners-tab"
-        }
-      >
-        {activeTab === "deploy" ? (
-          <MinersPage wallet={wallet} />
-        ) : activeTab === "sale" ? (
-          <SalePage wallet={wallet} />
-        ) : activeTab === "referral" ? (
-          <ReferralPage wallet={wallet} />
-        ) : (
-          <MyMinersPage wallet={wallet} />
-        )}
-      </div>
+      {visibleTabs.map(tab => <div key={tab} hidden={tab !== activeTab} role="tabpanel"
+        id={tab === "deploy" ? "deploy-miners-panel" : tab === "sale" ? "degen-miner-sale-panel" : tab === "referral" ? "miner-referral-panel" : "my-miners-panel"}
+        aria-labelledby={tab === "deploy" ? "deploy-miners-tab" : tab === "sale" ? "degen-miner-sale-tab" : tab === "referral" ? "miner-referral-tab" : "my-miners-tab"}>
+        <PageActivity.Provider value={pageActive && tab === activeTab}>
+          {tab === "deploy" ? <MinersPage wallet={wallet} poolAddress={searchParams.get("pool") ?? undefined} /> : tab === "sale" ? <SalePage wallet={wallet} /> : tab === "referral" ? <ReferralPage wallet={wallet} /> : <MyMinersPage wallet={wallet} />}
+        </PageActivity.Provider>
+      </div>)}
     </div>
   );
 }

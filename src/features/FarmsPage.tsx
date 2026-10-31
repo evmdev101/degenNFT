@@ -1,25 +1,33 @@
-// Farms tab (Stake LP) — markup and styling restored verbatim from the
-// original single-file site (commit 825e9f2). Logic mirrors
-// loadBrowseDegenFarms / fetchDegenVaultData / renderDegenFarmCard /
-// renderFarmHighlights / updateDegenRewardsBanner / pickHarvestDest and the
-// approve / stake / unstake / harvest handlers from the original script.
+import { FARM_REGISTRY } from "./dashboard/config";
+import { TOKEN_LOGOS } from "../config/tokenLogos";
+import { readFarmClaimSnapshot, type FarmClaimSnapshot } from "./farmClaimData";
+import { quoteFarmClaim } from "./farmClaimQuote";
+import { usePageActive } from "../hooks/usePageActive";
+import { confirmTransaction } from "../lib/transactions";
+// DEGEN's LP vaults, with the OINK/CashX card layout and per-stake withdrawals.
 import {
   Contract,
-  MaxUint256,
   ZeroAddress,
   formatEther,
   formatUnits,
   parseUnits,
 } from "ethers";
 import type { CSSProperties, ReactNode } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { CopyAddress } from "../components/CopyAddress";
+import { FarmPop } from "./FarmPop";
+import { FarmStakes } from "./FarmStakes";
+import { farmStakeCountLabel, readFarmStakes, StakeChangedError, summarizeFarmStakes, withdrawSelectedStake } from "./farmStakeData";
+import type { FarmStake } from "./farmStakeData";
 import { CONTRACTS, ERC20_ABI } from "../config/contracts";
 import type { WalletState } from "../hooks/useWallet";
-import { getPublicProvider } from "../lib/chain";
+import { getPublicProvider, pulsechainRpcCall } from "../lib/chain";
 
 // ── Constants from the original script ──────────────────────────────────────
 const MASTERCHEF2 = "0xC84FbE083713544BB4Ea85E2fe95148D076b2942";
-const BLOCKS_PER_DAY = 8000;
+// Display projections use the same stated block assumption as APR.
+const BLOCKS_PER_DAY = 600;
 const APR_BLOCKS_PER_DAY = 600;
 const DAYS_PER_YEAR = 365;
 const DEGEN_VAULT_DATA_URL =
@@ -34,103 +42,10 @@ const PULSEX_ADD_V1_URL = PULSEX_BASE_URL + "/add/V1";
 const PULSEX_ADD_V2_URL = PULSEX_BASE_URL + "/add/V2";
 const PULSEX_SWAP_URL = PULSEX_BASE_URL + "/swap";
 
-const _DS_IMG = (name: string) =>
-  `https://raw.githubusercontent.com/degenstrategy/interface/main/img/${name}.png`;
-const _PT_IMG = (addr: string) =>
-  `https://raw.githubusercontent.com/piteasio/app-tokens/main/token-logo/${addr}.png`;
-
-const TOKEN_LOGOS: Record<string, string> = {
-  PLS: "pls.png",
-  PLSX: _PT_IMG("0x95B303987A60C71504D99Aa1b13B4DA07b0790ab"),
-  INC: _PT_IMG("0x2fa878Ab3F87CC1C9737Fc071108F904c0B0C95d"),
-  HEX: _DS_IMG("hex"),
-  "T-Shares": _DS_IMG("hex"),
-  HOA: _PT_IMG("0x7901a3569679AEc3501dbeC59399F327854a70fe"),
-  ATROPA: _PT_IMG("0xCc78A0acDF847A2C1714D2A925bB4477df5d48a6"),
-  pDAI: _DS_IMG("dai"),
-  pUSDT: _PT_IMG("0xdAC17F958D2ee523a2206206994597C13D831ec7"),
-  pUSDC: _PT_IMG("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"),
-  PDRIP: _PT_IMG("0xeB2CEed77147893Ba8B250c796c2d4EF02a72B68"),
-  EMIT: _DS_IMG("emit"),
-  COM: _PT_IMG("0x5A9780Bfe63f3ec57f01b087cD65BD656C9034A8"),
-  HTT: _DS_IMG("htt"),
-  PRINT: _DS_IMG("print"),
-  sPRINT: _DS_IMG("print"),
-  INCD: _DS_IMG("incd"),
-  "9INCH": _DS_IMG("9inch"),
-  vPLS: "vouchpls.png",
-  HOC: _DS_IMG("hoc"),
-  ISLAND:
-    "https://cdn.dexscreener.com/cms/images/654e3bc18fb1a952a77693c1ee11a95c9fdfb989c0e1b63106127992675c8ae5?width=800&height=800&quality=95&format=auto",
-  IMPLS:
-    "https://coin-images.coingecko.com/coins/images/31493/small/impls_200x200.png?1696530304",
-  OINK: _DS_IMG("oink"),
-  DEGEN: _DS_IMG("degen"),
-};
-
 type FarmDef = { name: string; tokens: string[]; addr: string; dec: number };
 
 // Sourced from https://raw.githubusercontent.com/DegenStrategy/DEGEN/refs/heads/main/vaultData.json
-const DEGEN_FARMS: FarmDef[] = [
-  { name: "HEX-HTT3000 V2 LP", tokens: ["HEX", "HTT"], addr: "0x7979bEe7F5Fe93F4b22d7A24C629803950610e56", dec: 18 },
-  { name: "HEX-HTT5000 V2 LP", tokens: ["HEX", "HTT"], addr: "0xCAadb7032B8Fd0DD8386092b871d275c5c9684b0", dec: 18 },
-  { name: "HEX-HTT7000 V2 LP", tokens: ["HEX", "HTT"], addr: "0xeea4a58838029d8Df7Cb0cE8a50045222551708A", dec: 18 },
-  { name: "INC-PRINT V2 LP", tokens: ["INC", "PRINT"], addr: "0x5055a3F634349437f4E87d915Cf85Ca836FF1FFC", dec: 18 },
-  { name: "DAI-INCD V2 LP", tokens: ["pDAI", "INCD"], addr: "0x988f2af54cE20D3d2F44177f953158B74341e1C9", dec: 18 },
-  { name: "EMIT", tokens: ["EMIT"], addr: "0xB57aA188ab1B01B48e6d71F98264503C8B212B70", dec: 18 },
-  { name: "EMIT-PLS V2 LP", tokens: ["EMIT", "PLS"], addr: "0x61CB65c28040c26B1Fc31eFa17B4566c69199cC2", dec: 18 },
-  { name: "DAI-PLS V1 LP", tokens: ["pDAI", "PLS"], addr: "0x221e0B764Bb29d720C747a5885B0cE71d0a202Ac", dec: 18 },
-  { name: "INC-PLSX V1 LP", tokens: ["INC", "PLSX"], addr: "0x30d1895243d7E5A6db345158879DBe6CBBE03FE6", dec: 18 },
-  { name: "PLS-PLSX V1 LP", tokens: ["PLS", "PLSX"], addr: "0x7196998B37774b4652c389c359f30FC8d9EC7f53", dec: 18 },
-  { name: "HEX-PLS V1 LP", tokens: ["HEX", "PLS"], addr: "0x437Cd9eaFaF8E062069f04C11994ed38ABd73D34", dec: 18 },
-  { name: "DAI-9INCH V2 LP", tokens: ["pDAI", "9INCH"], addr: "0x6d6Ed53A3647B96d147850495e57F6E7F52cA0bf", dec: 18 },
-  { name: "vPLS-PLS V2 LP", tokens: ["vPLS", "PLS"], addr: "0x3a37c64B56F0F7cF7F402688753B1692BB46BC32", dec: 18 },
-  { name: "HOC-PLS V2 LP", tokens: ["HOC", "PLS"], addr: "0xc4dA722b1D7b13B46786f79F46F274fe16E096Ae", dec: 18 },
-  { name: "PRINT-sPRINT V2 LP", tokens: ["PRINT", "sPRINT"], addr: "0x9Ba60bB19f21a01a0323F54BB001497f00B7A304", dec: 18 },
-  { name: "OINK-PLS V2 LP", tokens: ["OINK", "PLS"], addr: "0x61B374Fd8Fa06767927bfb11B947d165C06a8c5E", dec: 18 },
-  { name: "OINK-DEGEN V2 LP", tokens: ["OINK", "DEGEN"], addr: "0xBCb904a9422F223f5A79660f026310D4bd8C9941", dec: 18 },
-  { name: "EMIT-PLSX V2 LP", tokens: ["EMIT", "PLSX"], addr: "0xc667a6EC483edB71f6329413FbcFE8042348956C", dec: 18 },
-  { name: "ISLAND-PLS V2 LP", tokens: ["ISLAND", "PLS"], addr: "0xBCFd877b255fF3c2416e2fe5DA7EC8778cC5b57d", dec: 18 },
-  { name: "IMPLS-INC V2 LP", tokens: ["IMPLS", "INC"], addr: "0xd100e649956aCAa3B6F90D58546219C373d28ce2", dec: 18 },
-  { name: "PLSX-9INCH V2 LP", tokens: ["PLSX", "9INCH"], addr: "0x6a89ef54f612bcf35582bad159760223eec20690", dec: 18 },
-  { name: "USDC-PLS V1 LP", tokens: ["pUSDC", "PLS"], addr: "0x52763911bDe0651D0709120d51afE3E33c5EccA5", dec: 18 },
-  { name: "USDT-PLS V1 LP", tokens: ["pUSDT", "PLS"], addr: "0x43724568cAb0CCf712eF5dfA40E9Aec68fff5a95", dec: 18 },
-  { name: "HEX-HTT4000 V2 LP", tokens: ["HEX", "HTT"], addr: "0xF3EAbb9297B8c7EacFf46190BE97D04bA5b707e2", dec: 18 },
-  { name: "HEX-HTT6000 V2 LP", tokens: ["HEX", "HTT"], addr: "0x38906e4747e6669D26928F39Fd9f3ddd2f299d46", dec: 18 },
-];
-
-const DEGEN_DAILY_REWARD_FALLBACKS: Record<string, number> = {
-  // Official DegenStrategy view reports this rate for the active OINK-DEGEN LP position.
-  "0xbcb904a9422f223f5a79660f026310d4bd8c9941": 681625,
-};
-
-const DEGEN_OFFICIAL_STATS_SNAPSHOT = [
-  { symbol: "HEX-HTT3000", poolId: 4, apr: 1290, valueOfTVAL: 296.96386316, valueOfAnnualInterest: 3830.36315453463, rewardAllocation: "4.0" },
-  { symbol: "HEX-HTT5000", poolId: 5, apr: 1141, valueOfTVAL: 318.83470398, valueOfAnnualInterest: 3638.8398805157003, rewardAllocation: "3.8" },
-  { symbol: "HEX-HTT7000", poolId: 6, apr: 978, valueOfTVAL: 381.82510978, valueOfAnnualInterest: 3734.6015199192, rewardAllocation: "3.9" },
-  { symbol: "INC-PRINT", poolId: 7, apr: 0, valueOfTVAL: 122.17353563, valueOfAnnualInterest: 0, rewardAllocation: "0.0" },
-  { symbol: "DAI-INCD", poolId: 8, apr: 0, valueOfTVAL: 2651.60008061, valueOfAnnualInterest: 0, rewardAllocation: "0.0" },
-  { symbol: "EMIT", poolId: 9, apr: 41, valueOfTVAL: 281.96891920585824, valueOfAnnualInterest: 114.91055339029, rewardAllocation: "0.1" },
-  { symbol: "EMIT-PLS", poolId: 10, apr: 105, valueOfTVAL: 91.14377832, valueOfAnnualInterest: 95.74456993395, rewardAllocation: "0.1" },
-  { symbol: "DAI-PLS", poolId: 11, apr: 416, valueOfTVAL: 528.98158375, valueOfAnnualInterest: 2202.4494284023, rewardAllocation: "2.3" },
-  { symbol: "INC-PLSX", poolId: 12, apr: 832, valueOfTVAL: 885.84160038, valueOfAnnualInterest: 7373.4584651163805, rewardAllocation: "7.7" },
-  { symbol: "PLS-PLSX", poolId: 13, apr: 941, valueOfTVAL: 732.86217715, valueOfAnnualInterest: 6894.66733756843, rewardAllocation: "7.2" },
-  { symbol: "HEX-PLS", poolId: 14, apr: 387, valueOfTVAL: 1734.31604696, valueOfAnnualInterest: 6703.144058761431, rewardAllocation: "7.0" },
-  { symbol: "DAI-9INCH", poolId: 15, apr: 239, valueOfTVAL: 200.04480013, valueOfAnnualInterest: 478.79112754795, rewardAllocation: "0.5" },
-  { symbol: "vPLS-PLS", poolId: 16, apr: 282, valueOfTVAL: 3224.9341998954224, valueOfAnnualInterest: 9097.13383065221, rewardAllocation: "9.5" },
-  { symbol: "HOC-PLS", poolId: 17, apr: 751, valueOfTVAL: 229.54301276, valueOfAnnualInterest: 1723.65830085435, rewardAllocation: "1.8" },
-  { symbol: "PRINT-sPRINT", poolId: 18, apr: 297, valueOfTVAL: 419.0590610623356, valueOfAnnualInterest: 1244.8671733064, rewardAllocation: "1.3" },
-  { symbol: "OINK-PLS", poolId: 19, apr: 602, valueOfTVAL: 238.44302398, valueOfAnnualInterest: 1436.37338264385, rewardAllocation: "1.5" },
-  { symbol: "OINK-DEGEN", poolId: 20, apr: 249, valueOfTVAL: 1541.016634115349, valueOfAnnualInterest: 3830.36315453463, rewardAllocation: "4.0" },
-  { symbol: "EMIT-PLSX", poolId: 21, apr: 108, valueOfTVAL: 88.26517575, valueOfAnnualInterest: 95.74456993395, rewardAllocation: "0.1" },
-  { symbol: "ISLAND-PLS", poolId: 22, apr: 573, valueOfTVAL: 41.815770901720455, valueOfAnnualInterest: 239.39556616801002, rewardAllocation: "0.2" },
-  { symbol: "IMPLS-INC", poolId: 23, apr: 98, valueOfTVAL: 292.45627812823716, valueOfAnnualInterest: 287.26784874095, rewardAllocation: "0.3" },
-  { symbol: "PLSX-9INCH", poolId: 25, apr: 413, valueOfTVAL: 150.71507968, valueOfAnnualInterest: 622.42505431246, rewardAllocation: "0.6" },
-  { symbol: "USDC-PLS", poolId: 26, apr: 28, valueOfTVAL: 338.98723038, valueOfAnnualInterest: 95.74456993395, rewardAllocation: "0.1" },
-  { symbol: "USDT-PLS", poolId: 27, apr: 27, valueOfTVAL: 357.11357069, valueOfAnnualInterest: 95.74456993395, rewardAllocation: "0.1" },
-  { symbol: "HEX-HTT4000", poolId: 29, apr: 1034, valueOfTVAL: 185.23620147, valueOfAnnualInterest: 1915.18157966135, rewardAllocation: "2.0" },
-  { symbol: "HEX-HTT6000", poolId: 30, apr: 989, valueOfTVAL: 174.21123182999997, valueOfAnnualInterest: 1723.65830085435, rewardAllocation: "1.8" },
-];
+const DEGEN_FARMS: FarmDef[] = FARM_REGISTRY.map(farm => ({ name: farm.name, tokens: [...farm.tokens], addr: farm.address, dec: farm.decimals }));
 
 const DTX_CHEF_ABI = [
   "function poolLength() view returns (uint256)",
@@ -150,21 +65,27 @@ const DEGEN_VAULT_ABI = [
   "function viewStakeEarnings(address _user, uint256 _stakeID) view returns (uint256)",
   "function deposit(uint256 _amount, address referral) payable",
   "function withdraw(uint256 _stakeID)",
+  "function stakeToken() view returns (address)",
+  "function depositFee() view returns (uint256)",
+  "function fundingRate() view returns (uint256)",
 ];
 const DEGEN_REWARDS_HELPER_ABI = [
   "function claimWithHarvest(address[] _contractAddresses, address _userAddress, uint256[][] _stakeIDs, uint256 _amount, address _into)",
   "function claimRewards(uint256 _amount, address _harvestInto)",
+  "function defaultDirectPayout() view returns (uint256)",
+  "function viewPoolPayout(address) view returns (uint256)",
+  "function viewPoolMinServe(address) view returns (uint256)",
   "function balanceOf(address) view returns (uint256)",
 ];
 const TOKEN_DEC_ABI = ["function decimals() view returns (uint8)"];
 const SYMBOL_ABI = ["function symbol() view returns (string)"];
 
 const HARVEST_DESTS_DEGEN = [
-  { label: "10 Year DEGEN Pool (default)", payoutPct: 100, addr: "0xdE672FccA32365bD704c39bd1164a0D34a3a73e6" },
-  { label: "1 Year DEGEN Pool", payoutPct: 5, addr: "0x3d175C8359169b0e830d36EA9CD3FE209f46f7BD" },
-  { label: "3 Month DEGEN Pool", payoutPct: 2.5, addr: "0x7ED33f65A0398cb26eaB2B03877825c96D9B6077" },
-  { label: "1 Month DEGEN Pool", payoutPct: 1, addr: "0xd9b491ac0f5487673500b67224b67b4171a08aca" },
-  { label: "Into Wallet", payoutPct: 0.5, addr: null as string | null },
+  { label: "10 Year DEGEN Pool (default)", addr: "0xdE672FccA32365bD704c39bd1164a0D34a3a73e6" },
+  { label: "1 Year DEGEN Pool", addr: "0x3d175C8359169b0e830d36EA9CD3FE209f46f7BD" },
+  { label: "3 Month DEGEN Pool", addr: "0x7ED33f65A0398cb26eaB2B03877825c96D9B6077" },
+  { label: "1 Month DEGEN Pool", addr: "0xd9b491ac0f5487673500b67224b67b4171a08aca" },
+  { label: "Into Wallet", addr: null as string | null },
 ];
 
 // ── Formatting helpers from the original script ──────────────────────────────
@@ -197,15 +118,16 @@ function farmAprText(apr: number | null | undefined) {
   if (n >= 100) return n.toFixed(0) + "%";
   return n.toFixed(2) + "%";
 }
+function formatClaimableAmount(raw: bigint) {
+  const value = Number(formatUnits(raw, 18));
+  return raw > 0n && value < 1e-8 ? "<0.00000001" : fmtLpAmount(value);
+}
 function friendlyTxError(err: unknown) {
   const e = err as { reason?: string; shortMessage?: string; message?: string };
   const m = String(e?.reason || e?.shortMessage || e?.message || "Transaction failed");
   if (/user rejected|user denied|ACTION_REJECTED/i.test(m))
     return "Transaction rejected in wallet";
   return m.length > 120 ? m.slice(0, 120) + "…" : m;
-}
-function rewardAmountToWei(amount: number) {
-  return BigInt(Math.round(Number(amount || 0) * 1e8)) * 10000000000n;
 }
 const farmTimeout = <T,>(promise: Promise<T>, ms: number, fallback: T | null = null) =>
   Promise.race([
@@ -251,6 +173,9 @@ type PairInfo = {
 
 let _degenAllocMap: AllocMap = null;
 let _degenVaultMetaMap: Map<string, VaultMeta> | null = null;
+let officialStatsReadAt = 0;
+let priceCacheReadAt = 0;
+let allocationReadAt = 0;
 let _degenOfficialStatsMap: Map<string, OfficialStats> | null = null;
 let _degenPairPriceGraph: Map<string, { token: string; rate: number }[]> | null =
   null;
@@ -268,21 +193,15 @@ async function buildAllocMap(): Promise<AllocMap> {
     const provider = await getPublicProvider();
     const mc = new Contract(MASTERCHEF2, DTX_CHEF_ABI, provider);
     const rpcCall = async (data: string) => {
-      const res = (await withT(
-        fetch("https://rpc.pulsechain.com", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            method: "eth_call",
-            params: [{ to: MASTERCHEF2, data }, "latest"],
-            id: 1,
-          }),
-        }).then((r) => r.json()),
-        8000,
-      )) as { error?: { message: string }; result: string };
-      if (res.error) throw new Error(res.error.message);
-      return BigInt(res.result);
+      const result = await withT(
+        pulsechainRpcCall<string>(
+          "eth_call",
+          [{ to: MASTERCHEF2, data }, "latest"],
+          8000,
+        ),
+        9000,
+      );
+      return BigInt(result);
     };
     const [poolLen, totalAlloc, rpb] = await Promise.all([
       mc.poolLength(),
@@ -617,7 +536,7 @@ function buildDegenOfficialStatsMap(details: OfficialStats[] | null) {
 }
 
 async function fetchDegenOfficialStatsMap() {
-  if (_degenOfficialStatsMap) return _degenOfficialStatsMap;
+  if (_degenOfficialStatsMap && Date.now() - officialStatsReadAt < 60_000) return _degenOfficialStatsMap;
   let details: OfficialStats[] | null = null;
   try {
     const data = (await withT(
@@ -630,8 +549,9 @@ async function fetchDegenOfficialStatsMap() {
   } catch (e) {
     console.warn("fetchDegenOfficialStatsMap", (e as Error).message);
   }
+  if (details) officialStatsReadAt = Date.now();
   _degenOfficialStatsMap = buildDegenOfficialStatsMap(
-    details || (DEGEN_OFFICIAL_STATS_SNAPSHOT as OfficialStats[]),
+    details || [],
   );
   return _degenOfficialStatsMap;
 }
@@ -675,7 +595,7 @@ async function fetchDegenVaultMetaMap() {
     _degenVaultMetaMap = map;
   } catch (e) {
     console.warn("fetchDegenVaultMetaMap", (e as Error).message);
-    _degenVaultMetaMap = new Map();
+    return new Map<string, VaultMeta>();
   }
   return _degenVaultMetaMap;
 }
@@ -705,9 +625,15 @@ function annualRewardUsd(
 
 // ── Farm data type ────────────────────────────────────────────────────────────
 type FarmData = {
+  decimals: number;
+  depositFeeBps: bigint | null;
+  fundingRateBps: bigint | null;
+  pendingKnown: boolean;
   farm: FarmDef;
   idx: number;
   stakeCount: number;
+  stakeCountKnown: boolean;
+  stakes: FarmStake[];
   totalStaked: number;
   totalStakedRaw: bigint;
   pendingDegen: number;
@@ -734,6 +660,43 @@ type FarmData = {
   rewardPriceUsd: number | null;
   ts: number;
 };
+
+
+function emptyFarm(farm: FarmDef, idx: number): FarmData {
+  return {
+          decimals: farm.dec, depositFeeBps: null, fundingRateBps: null, pendingKnown: false,
+          farm,
+          idx,
+          stakeCount: 0,
+          stakeCountKnown: false,
+          stakes: [],
+          totalStaked: 0,
+          totalStakedRaw: 0n,
+          pendingDegen: 0,
+          dailyReward: 0,
+          apr: null,
+          tvlUsd: null,
+          tvlRewardToken: null,
+          officialStats: null,
+          claimableStakeIds: [],
+          lpAddr: null,
+          allocPct: null,
+          pairToken0: null,
+          pairToken1: null,
+          walletBal: null,
+          walletUsd: null,
+          walletBalRaw: null,
+          allowanceRaw: null,
+          lpPriceUsd: null,
+          stakedUsd: null,
+          stakedPct: null,
+          pendingUsd: null,
+          annualRewardTokens: null,
+          annualRewardsUsd: null,
+          rewardPriceUsd: null,
+          ts: Date.now(),
+        };
+}
 
 function isActiveDegenFarm(d: FarmData | null) {
   return (
@@ -789,7 +752,7 @@ function FarmTokenOrb({ token }: { token: string }) {
   const logo = TOKEN_LOGOS[token];
   const label = token.replace(/^p/, "").slice(0, 4);
   return (
-    <span className="bfc-token-orb" title={token}>
+    <span className="bfc-token-orb">
       {logo ? (
         <img
           src={logo}
@@ -815,35 +778,6 @@ function FarmTokenPair({ tokens }: { tokens: string[] }) {
   );
 }
 
-function FarmPop({
-  icon,
-  title,
-  rows,
-}: {
-  icon: string;
-  title: string;
-  rows: [string, string][];
-}) {
-  return (
-    <span className="farm-pop">
-      <button className="farm-pop-btn" type="button" aria-label={title}>
-        {icon}
-      </button>
-      <span className="farm-pop-panel">
-        <span className="farm-pop-title">
-          {icon} {title}
-        </span>
-        {rows.map(([k, v]) => (
-          <span className="farm-pop-row" key={k}>
-            <span>{k}:</span>
-            <b>{v}</b>
-          </span>
-        ))}
-      </span>
-    </span>
-  );
-}
-
 function AprBreakdownPop({ apr }: { apr: number | null }) {
   const n = Number(apr);
   if (!Number.isFinite(n) || !(n > 0)) return null;
@@ -858,6 +792,7 @@ function AprBreakdownPop({ apr }: { apr: number | null }) {
         ["Weekly", f(n / 52)],
         ["Monthly", f(n / 12)],
         ["Yearly", f(n)],
+        ["Assumptions", "Simple annual return, no compounding. Current prices and allocation; RPC estimate assumes 600 blocks/day. API estimates may use different timing."],
       ]}
     />
   );
@@ -894,9 +829,13 @@ function farmTimeLeftNode(
 ): ReactNode {
   const alloc = Number(allocPctRaw);
   if ((annualTokens || 0) > 0 || alloc > 0)
-    return <span className="bfc-infinity">∞</span>;
-  if (annualTokens === 0 || alloc === 0) return "Ended";
+    return "Active";
+  if (annualTokens === 0 || alloc === 0) return "No allocation";
   return "—";
+}
+
+function farmStakeAmountsKnown(d: FarmData) {
+  return d.stakeCountKnown && d.stakes?.length === d.stakeCount && d.stakes.every((s) => s.info !== null);
 }
 
 type Status = { msg: string; cls: string };
@@ -907,10 +846,13 @@ type Breakdown =
 
 type HarvestModalState = {
   amount: number;
+  amountRaw: bigint;
+  farmName: string | null;
+  destinations: { label: string; addr: string | null; payoutBps: bigint; minimum: bigint; minimumServe: bigint }[];
   input: string;
   slider: number;
   selected: number;
-  resolve: (v: { into: string; amount: number }) => void;
+  resolve: (v: { into: string; amount: bigint; payoutBps: bigint; minimum: bigint; minimumServe: bigint }) => void;
   reject: (e: Error) => void;
 } | null;
 
@@ -960,25 +902,57 @@ function getTvlChange24h(tvl: number) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export function FarmsPage({ wallet }: { wallet: WalletState }) {
-  const [farms, setFarms] = useState<(FarmData | null)[]>([]);
+  const queryClient = useQueryClient();
+  const pageActive = usePageActive();
+  const farmQueryKey = ["farm-snapshot", wallet.address?.toLowerCase() ?? null];
+  const [farms, setFarms] = useState<(FarmData | null)[]>(() =>
+    queryClient.getQueryData<(FarmData | null)[]>(farmQueryKey) ?? DEGEN_FARMS.map(emptyFarm),
+  );
   const [loading, setLoading] = useState(false);
-  const [helperCredit, setHelperCredit] = useState(0);
+  const [helperCredit, setHelperCredit] = useState<number | null>(null);
+  const [allClaimRaw, setAllClaimRaw] = useState<bigint | null>(null);
+  const allClaimRead = useRef<Promise<{ snapshot: FarmClaimSnapshot; totalRaw: bigint }> | null>(null);
+  const activeRef = useRef(pageActive); activeRef.current = pageActive;
+  const claimGeneration = useRef(0);
   const [stakedOnly, setStakedOnly] = useState(false);
   const [view, setView] = useState<"grid" | "table">("grid");
   const [inputs, setInputs] = useState<Record<number, string>>({});
   const [statuses, setStatuses] = useState<Record<number, Status>>({});
   const [busy, setBusy] = useState<Record<number, boolean>>({});
+  const [openStakes, setOpenStakes] = useState<Record<number, boolean>>({});
   const [breakdowns, setBreakdowns] = useState<Record<number, Breakdown | undefined>>({});
-  const [bannerStatus, setBannerStatus] = useState<Status>({ msg: "", cls: "" });
   const [harvestModal, setHarvestModal] = useState<HarvestModalState>(null);
   const [tvlChange24h, setTvlChange24h] = useState<number | null>(null);
-  const [, setTick] = useState(0);
   const loadSeq = useRef(0);
+  const actionLocks = useRef(new Set<number>());
+  const claimDialogLock = useRef(false);
+  const claimSubmissionLock = useRef(false);
+  const beginAction = (idx: number) => {
+    if (actionLocks.current.has(idx) || actionLocks.current.has(-1) || (idx === -1 && actionLocks.current.size > 0)) return false;
+    actionLocks.current.add(idx);
+    setBusy(current => ({ ...current, [idx]: true }));
+    return true;
+  };
+  const endAction = (idx: number) => {
+    actionLocks.current.delete(idx);
+    setBusy(current => ({ ...current, [idx]: false }));
+  };
   const statusTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
-
+  const harvestModalRef = useRef(harvestModal);
+  harvestModalRef.current = harvestModal;
   useEffect(() => {
-    const timer = setInterval(() => setTick((t) => t + 1), 1000);
-    return () => clearInterval(timer);
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && harvestModalRef.current) {
+        harvestModalRef.current.reject(new Error("Cancelled")); setHarvestModal(null);
+      }
+    };
+    window.addEventListener("keydown", escape);
+    return () => {
+      window.removeEventListener("keydown", escape);
+      claimGeneration.current++;
+      harvestModalRef.current?.reject(new Error("Cancelled"));
+      Object.values(statusTimers.current).forEach(clearTimeout);
+    };
   }, []);
 
   const setFarmStatus = useCallback((idx: number, msg: string, cls = "") => {
@@ -995,10 +969,14 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
     [setFarmStatus],
   );
 
-  const patchFarm = (idx: number, patch: Partial<FarmData>) =>
-    setFarms((prev) =>
-      prev.map((d, i) => (i === idx && d ? { ...d, ...patch } : d)),
+  const patchFarm = (idx: number, patch: Partial<FarmData>) => {
+    const update = (prev: (FarmData | null)[]) =>
+      prev.map((d, i) => (i === idx && d ? { ...d, ...patch } : d));
+    setFarms(update);
+    queryClient.setQueryData<(FarmData | null)[]>(farmQueryKey, (prev) =>
+      prev ? update(prev) : undefined,
     );
+  };
 
   const fetchHelperCredit = useCallback(async () => {
     if (!wallet.address) return;
@@ -1016,6 +994,62 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
     }
   }, [wallet.address]);
 
+  const readFreshClaim = useCallback(async (farm: FarmData | null) => {
+    if (!wallet.address) throw new Error("Connect your wallet first.");
+    if (!farm && allClaimRead.current) return allClaimRead.current;
+    const account = wallet.address;
+    const read = (async () => {
+      const provider = await getPublicProvider();
+      const block = await provider.getBlock("latest");
+      if (!block || !Number.isSafeInteger(block.number) || Date.now() - block.timestamp * 1000 > 120_000 || block.timestamp * 1000 - Date.now() > 30_000) throw new Error("Current farm rewards could not be checked. Please try again shortly.");
+      const helper = new Contract(DEGEN_REWARDS_HELPER, DEGEN_REWARDS_HELPER_ABI, provider);
+      const at = { blockTag: block.number };
+      const vaults = new Map<string, Contract>();
+      const vault = (address: string) => {
+        if (!vaults.has(address)) vaults.set(address, new Contract(address, DEGEN_VAULT_ABI, provider));
+        return vaults.get(address)!;
+      };
+      const snapshot = await readFarmClaimSnapshot(account, farm ? [farm.farm.addr] : DEGEN_FARMS.map(item => item.addr), {
+        helperBalance: user => helper.balanceOf(user, at),
+        stakeCount: (address, user) => vault(address).getNrOfStakes(user, at),
+        pendingRewards: (address, user) => vault(address).viewUserTotalEarnings(user, at),
+      });
+      // Stateful eth_call includes funding fees and already accumulated Chef credit.
+      // No simulated harvest or transfer is submitted to the chain.
+      const totalRaw = await quoteFarmClaim(provider, account, DEGEN_REWARDS_HELPER, snapshot.farms, block.number);
+      if (Date.now() - block.timestamp * 1000 > 120_000) throw new Error("Farm rewards changed while checking. Please try again.");
+      return { snapshot, totalRaw };
+    })();
+    const bounded = withT(read, 20_000).catch(error => {
+      if (error instanceof Error && error.message === "timeout") throw new Error("Farm rewards are taking longer to load. Please try the claim again shortly.");
+      throw error;
+    });
+    if (!farm) allClaimRead.current = bounded;
+    try { return await bounded; }
+    finally { if (!farm && allClaimRead.current === bounded) allClaimRead.current = null; }
+  }, [wallet.address]);
+
+  useEffect(() => {
+    if (!pageActive || !wallet.address) return;
+    let stopped = false, running = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      if (stopped || running || document.hidden) return;
+      running = true;
+      try { const fresh = await readFreshClaim(null); if (!stopped) setAllClaimRaw(fresh.totalRaw); }
+      catch { /* Retain the last successful total; a claim still requires a fresh quote. */ }
+      finally { running = false; clearTimeout(timer); if (!stopped) timer = setTimeout(() => void poll(), 60_000); }
+    };
+    const resume = () => { if (!document.hidden) { clearTimeout(timer); void poll(); } };
+    void poll();
+    document.addEventListener("visibilitychange", resume);
+    window.addEventListener("degen:transaction-settled", resume);
+    return () => { stopped = true; clearTimeout(timer); document.removeEventListener("visibilitychange", resume); window.removeEventListener("degen:transaction-settled", resume); };
+  }, [pageActive, wallet.address, readFreshClaim]);
+  useEffect(() => {
+    if (!pageActive) { claimGeneration.current++; harvestModalRef.current?.reject(new Error("Cancelled")); setHarvestModal(null); }
+  }, [pageActive]);
+
   // ── fetchDegenVaultData (ported) ────────────────────────────────────────────
   const loadFarms = useCallback(async () => {
     if (!wallet.address) {
@@ -1025,13 +1059,22 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
     const address = wallet.address;
     const seq = ++loadSeq.current;
     setLoading(true);
-    setFarms([]);
+    setFarms(queryClient.getQueryData<(FarmData | null)[]>([
+      "farm-snapshot", address.toLowerCase(),
+    ]) ?? DEGEN_FARMS.map(emptyFarm));
 
-    const provider = await getPublicProvider();
-    const metaMap = await fetchDegenVaultMetaMap();
-    if (!_degenAllocMap) _degenAllocMap = await buildAllocMap();
-    const degenPriceUsd = await fetchTokenUsd(CONTRACTS.degen);
-    const officialStatsMap = await fetchDegenOfficialStatsMap();
+    if (Date.now() - priceCacheReadAt > 60_000) {
+      _farmTokenPriceCache.clear(); _farmPairLiquidityCache.clear(); _farmPairInfoCache.clear(); _lpBreakdownCache.clear();
+      priceCacheReadAt = Date.now();
+    }
+    const [provider, metaMap, allocMap, degenPriceUsd, officialStatsMap] = await Promise.all([
+      getPublicProvider(),
+      fetchDegenVaultMetaMap(),
+      _degenAllocMap && Date.now() - allocationReadAt < 60_000 ? Promise.resolve(_degenAllocMap) : buildAllocMap(),
+      fetchTokenUsd(CONTRACTS.degen),
+      fetchDegenOfficialStatsMap(),
+    ]);
+    if (allocMap) { _degenAllocMap = allocMap; allocationReadAt = Date.now(); }
     void fetchHelperCredit();
     let degenPriceGraph: Map<string, { token: string; rate: number }[]> | null =
       null;
@@ -1044,6 +1087,8 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
         totalStakedRaw = 0n,
         pendingDegen = 0,
         dailyReward = 0;
+      let stakeCountKnown = false;
+      let stakes: FarmStake[] = [];
       let apr: number | null = null,
         tvlUsd: number | null = null,
         tvlRewardToken: number | null = null;
@@ -1064,7 +1109,9 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
 
       const meta = metaMap.get(farm.addr.toLowerCase()) || null;
       const lpAddr = meta?.tokenContract || null;
-      const lpDec = meta?.decimals || farm.dec;
+      let lpDec = meta?.decimals ?? farm.dec;
+      let depositFeeBps: bigint | null = null, fundingRateBps: bigint | null = null;
+      let pendingKnown = false;
 
       const officialStats = officialDegenFarmStats(officialStatsMap, farm, meta);
       if (officialStats) {
@@ -1098,50 +1145,43 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
 
       try {
         const c = new Contract(farm.addr, DEGEN_VAULT_ABI, provider);
+        [depositFeeBps, fundingRateBps, lpDec] = await Promise.all([
+          withT(c.depositFee(), 4000).then(BigInt).catch(() => null),
+          withT(c.fundingRate(), 4000).then(BigInt).catch(() => null),
+          lpAddr ? withT(new Contract(lpAddr, TOKEN_DEC_ABI, provider).decimals(), 4000).then(Number).catch(() => lpDec) : Promise.resolve(lpDec),
+        ]);
+        if (!Number.isInteger(lpDec) || lpDec < 0 || lpDec > 36) throw new Error("Unsupported token precision.");
         const nStakesRaw = await withT(c.getNrOfStakes(address), 6000).catch(() => null);
         const stakesKnown = nStakesRaw !== null;
+        stakeCountKnown = stakesKnown;
         if (stakesKnown) stakeCount = Number(nStakesRaw);
+        pendingKnown = stakesKnown && stakeCount === 0;
 
         let totalEarnedRaw: bigint | null = null;
         if (!stakesKnown || stakeCount > 0) {
           totalEarnedRaw = (await withT(c.viewUserTotalEarnings(address), 6000).catch(
             () => null,
           )) as bigint | null;
+          pendingKnown = totalEarnedRaw !== null;
           if (totalEarnedRaw && totalEarnedRaw > 0n) {
             pendingDegen = Number(formatUnits(totalEarnedRaw, 18));
           }
         }
 
         if (stakeCount > 0) {
-          let stakeEarningsWorks = false;
-          let stakePendingDegen = 0;
-          for (let s = 0; s < Math.min(stakeCount, 20); s++) {
-            try {
-              const [infoR, earnR] = await Promise.allSettled([
-                withT(c.userInfo(address, s), 4000),
-                withT(c.viewStakeEarnings(address, s), 4000),
-              ]);
-              if (infoR.status === "fulfilled") {
-                totalStakedRaw += BigInt(infoR.value.amount);
-                totalStaked += Number(formatUnits(infoR.value.amount, farm.dec));
-              }
-              if (earnR.status === "fulfilled") {
-                stakeEarningsWorks = true;
-                if (earnR.value > 0n) {
-                  stakePendingDegen += Number(formatUnits(earnR.value, 18));
-                  claimableStakeIds.push(BigInt(s));
-                }
-              }
-            } catch {
-              /* per-stake failures tolerated */
-            }
+          stakes = await readFarmStakes({
+            userInfo: (user, id) => withT(c.userInfo(user, id), 4000),
+            viewStakeEarnings: (user, id) => withT(c.viewStakeEarnings(user, id), 4000),
+          }, address, stakeCount);
+          const totals = summarizeFarmStakes(stakes);
+          if (totals.totalRaw !== null) {
+            totalStakedRaw = totals.totalRaw;
+            totalStaked = Number(formatUnits(totalStakedRaw, lpDec));
           }
-          if (stakeEarningsWorks) pendingDegen = stakePendingDegen;
-          if (!stakeEarningsWorks) {
-            if (totalEarnedRaw && totalEarnedRaw > 0n) {
-              pendingDegen = Number(formatUnits(totalEarnedRaw, 18));
-              for (let s = 0; s < stakeCount; s++) claimableStakeIds.push(BigInt(s));
-            }
+          if (totalEarnedRaw === null && totals.rewardsRaw !== null) { pendingDegen = Number(formatUnits(totals.rewardsRaw, 18)); pendingKnown = true; }
+          claimableStakeIds.push(...totals.claimableIds);
+          if (totals.rewardsRaw === null && pendingDegen > 0) {
+            claimableStakeIds.splice(0, claimableStakeIds.length, ...stakes.map((s) => s.id));
           }
           if (pendingDegen > 0 && claimableStakeIds.length === 0) {
             for (let s = 0; s < stakeCount; s++) claimableStakeIds.push(BigInt(s));
@@ -1248,14 +1288,13 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
           dailyReward = userShare * _degenAllocMap.rewardPerBlock * BLOCKS_PER_DAY * poolShare;
         }
       }
-      if (!(dailyReward > 1e-10) && stakeCount > 0 && pendingDegen > 0) {
-        dailyReward = DEGEN_DAILY_REWARD_FALLBACKS[farm.addr.toLowerCase()] || 0;
-      }
-
       results[idx] = {
+        decimals: lpDec, depositFeeBps, fundingRateBps, pendingKnown,
         farm,
         idx,
         stakeCount,
+        stakeCountKnown,
+        stakes,
         totalStaked,
         totalStakedRaw,
         pendingDegen,
@@ -1291,49 +1330,69 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
         DEGEN_FARMS.slice(i, i + BATCH).map((farm, j) => loadDegenFarm(farm, i + j)),
       );
       if (loadSeq.current !== seq) return;
+      setFarms((prev) => results.map((result, idx) => {
+        const previous = prev[idx];
+        if (result && previous) {
+          if (!result.pendingKnown && previous.pendingKnown) { result.pendingDegen = previous.pendingDegen; result.pendingUsd = previous.pendingUsd; result.pendingKnown = true; }
+          if (!farmStakeAmountsKnown(result) && farmStakeAmountsKnown(previous)) {
+            result.totalStaked = previous.totalStaked; result.totalStakedRaw = previous.totalStakedRaw; result.stakedUsd = previous.stakedUsd; result.stakes = previous.stakes; result.stakeCountKnown = true; result.stakeCount = previous.stakeCount;
+          }
+          for (const key of ["walletBal", "walletBalRaw", "walletUsd", "allowanceRaw", "lpPriceUsd", "tvlUsd", "apr"] as const) {
+            if (result[key] === null) Object.assign(result, { [key]: previous[key] });
+          }
+        }
+        return result ?? previous ?? null;
+      }));
     }
 
+    const previous = queryClient.getQueryData<(FarmData | null)[]>(["farm-snapshot", address.toLowerCase()]);
     DEGEN_FARMS.forEach((farm, idx) => {
+      if (!results[idx] && previous?.[idx]) results[idx] = previous[idx];
       if (!results[idx])
-        results[idx] = {
-          farm,
-          idx,
-          stakeCount: 0,
-          totalStaked: 0,
-          totalStakedRaw: 0n,
-          pendingDegen: 0,
-          dailyReward: 0,
-          apr: null,
-          tvlUsd: null,
-          tvlRewardToken: null,
-          officialStats: null,
-          claimableStakeIds: [],
-          lpAddr: null,
-          allocPct: null,
-          pairToken0: null,
-          pairToken1: null,
-          walletBal: null,
-          walletUsd: null,
-          walletBalRaw: null,
-          allowanceRaw: null,
-          lpPriceUsd: null,
-          stakedUsd: null,
-          stakedPct: null,
-          pendingUsd: null,
-          annualRewardTokens: null,
-          annualRewardsUsd: null,
-          rewardPriceUsd: null,
-          ts: Date.now(),
-        };
+        results[idx] = emptyFarm(farm, idx);
     });
     if (loadSeq.current !== seq) return;
+    queryClient.setQueryData(["farm-snapshot", address.toLowerCase()], results);
     setFarms(results);
     setLoading(false);
-  }, [wallet.address, fetchHelperCredit]);
+  }, [wallet.address, fetchHelperCredit, queryClient]);
 
   useEffect(() => {
-    void loadFarms();
-  }, [loadFarms]);
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout>;
+    let running = false;
+    const poll = async () => {
+      if (disposed || running || document.hidden || !pageActive) return;
+      running = true;
+      try { await loadFarms(); }
+      catch { /* Preserve the previous snapshot; retry automatically. */ }
+      finally {
+        running = false;
+        if (!disposed) {
+          setLoading(false);
+          timer = setTimeout(() => void poll(), 60_000);
+        }
+      }
+    };
+    const resume = () => {
+      if (!document.hidden && !running) {
+        clearTimeout(timer);
+        void poll();
+      }
+    };
+    void poll();
+    document.addEventListener("visibilitychange", resume);
+    window.addEventListener("degen:transaction-confirmed", resume);
+    window.addEventListener("degen:transaction-settled", resume);
+    return () => {
+      disposed = true;
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", resume);
+      window.removeEventListener("degen:transaction-confirmed", resume);
+      window.removeEventListener("degen:transaction-settled", resume);
+      loadSeq.current += 1;
+    };
+  }, [loadFarms, pageActive]);
 
   // ── refreshDegenFarmData (ported) ───────────────────────────────────────────
   const refreshFarm = useCallback(
@@ -1355,33 +1414,37 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
           stakeCount = Number(nStakes);
           patch.stakeCount = stakeCount;
         }
+        patch.stakeCountKnown = nStakes !== null;
         if (wRaw !== null) {
           patch.walletBalRaw = BigInt(wRaw);
-          patch.walletBal = Number(formatUnits(wRaw, 18));
+          patch.walletBal = Number(formatUnits(wRaw, d.decimals));
           if ((d.lpPriceUsd || 0) > 0) patch.walletUsd = patch.walletBal! * d.lpPriceUsd!;
         }
         if (aRaw !== null) patch.allowanceRaw = BigInt(aRaw);
-        let totalStaked = 0,
-          totalStakedRaw = 0n,
-          pending = 0;
-        const claimIds: bigint[] = [];
-        for (let s = 0; s < Math.min(stakeCount, 20); s++) {
-          const [infoR, earnR] = await Promise.allSettled([
-            c.userInfo(address, s),
-            c.viewStakeEarnings(address, s),
-          ]);
-          if (infoR.status === "fulfilled") {
-            totalStakedRaw += BigInt(infoR.value.amount);
-            totalStaked += Number(formatUnits(infoR.value.amount, 18));
-          }
-          if (earnR.status === "fulfilled" && earnR.value > 0n) {
-            pending += Number(formatUnits(earnR.value, 18));
-            claimIds.push(BigInt(s));
-          }
+        if (nStakes === null) {
+          patchFarm(d.idx, patch);
+          await fetchHelperCredit();
+          return;
         }
+        const stakes = await readFarmStakes({
+          userInfo: (user, id) => withT(c.userInfo(user, id), 4000),
+          viewStakeEarnings: (user, id) => withT(c.viewStakeEarnings(user, id), 4000),
+        }, address, stakeCount);
+        patch.stakes = stakes;
+        const totals = summarizeFarmStakes(stakes);
+        const totalStakedRaw = totals.totalRaw ?? d.totalStakedRaw;
+        const totalStaked = Number(formatUnits(totalStakedRaw, d.decimals));
+        const totalEarned = await withT(c.viewUserTotalEarnings(address), 4000).catch(() => totals.rewardsRaw);
+        const pending = totalEarned !== null ? Number(formatUnits(totalEarned, 18)) : d.pendingDegen;
+        const claimIds = totals.rewardsRaw === null && pending > 0 ? stakes.map((s) => s.id) : totals.claimableIds;
         patch.totalStaked = totalStaked;
         patch.totalStakedRaw = totalStakedRaw;
+        if (totals.totalRaw !== null) {
+          patch.dailyReward = totalStaked === 0 ? 0
+            : d.totalStaked > 0 ? d.dailyReward * totalStaked / d.totalStaked : d.dailyReward;
+        }
         patch.pendingDegen = pending;
+        patch.pendingKnown = totalEarned !== null;
         patch.claimableStakeIds = claimIds;
         patch.stakedUsd =
           (d.lpPriceUsd || 0) > 0 && totalStaked > 1e-10 ? totalStaked * d.lpPriceUsd! : null;
@@ -1401,34 +1464,39 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
   );
 
   // ── pickHarvestDest (ported as a modal driven by state) ────────────────────
-  function pickHarvestDest(amount: number) {
-    return new Promise<{ into: string; amount: number }>((resolve, reject) => {
-      const raw = (v: number) =>
-        v >= 1000 ? String(Math.floor(v)) : String(Number(v.toFixed(4)));
-      setHarvestModal({
-        amount,
-        input: amount > 0 ? raw(amount) : "0",
-        slider: 100,
-        selected: 0,
-        resolve,
-        reject,
-      });
-    });
+  async function readClaimDestinations(helper: Contract) {
+    return Promise.all(HARVEST_DESTS_DEGEN.map(async destination => {
+      const [payout, minimumServe, minimum] = await Promise.all([
+        destination.addr ? helper.viewPoolPayout(destination.addr) : helper.defaultDirectPayout(),
+        destination.addr ? helper.viewPoolMinServe(destination.addr) : Promise.resolve(0n),
+        destination.addr ? new Contract(destination.addr, ["function minimumGift() view returns (uint256)"], helper.runner).minimumGift() : Promise.resolve(0n),
+      ]);
+      const payoutBps = BigInt(payout);
+      if (payoutBps < 0n || payoutBps > 10000n) throw new Error("Claim payout terms are unavailable.");
+      return { label: destination.label, addr: destination.addr, payoutBps, minimum: BigInt(minimum), minimumServe: BigInt(minimumServe) };
+    }));
   }
-
+  async function pickHarvestDest(amountRaw: bigint, helper: Contract, farmName: string | null = null) {
+    if (claimDialogLock.current) throw new Error("Choose or close the current claim first.");
+    claimDialogLock.current = true;
+    try {
+      const destinations = await readClaimDestinations(helper);
+      return await new Promise<{ into: string; amount: bigint; payoutBps: bigint; minimum: bigint; minimumServe: bigint }>((resolve, reject) => {
+        setHarvestModal({ amount: Number(formatUnits(amountRaw, 18)), amountRaw, farmName, destinations,
+          input: formatUnits(amountRaw, 18), slider: 100, selected: 0, resolve, reject });
+      });
+    } finally { claimDialogLock.current = false; }
+  }
   const hdCurrentAmount = (modal: NonNullable<HarvestModalState>) => {
-    const v = parseFloat(String(modal.input).replace(/[, ]/g, ""));
-    if (!Number.isFinite(v) || v < 0) return 0;
-    return Math.min(v, modal.amount);
+    try {
+      if (!/^(0|[1-9]\d*)(\.\d+)?$/.test(modal.input)) return 0n;
+      const value = parseUnits(modal.input, 18);
+      return value > 0n && value <= modal.amountRaw ? value : 0n;
+    } catch { return 0n; }
   };
-  const hdPctText = (
-    d: (typeof HARVEST_DESTS_DEGEN)[number],
-    claimAmt: number,
-  ) => {
-    const recv = claimAmt > 0 ? ` (${fmtFullReward((claimAmt * d.payoutPct) / 100)})` : "";
-    return d.payoutPct === 100
-      ? `Receive 100%${recv}`
-      : `-${100 - d.payoutPct}% Penalty${recv}`;
+  const hdPctText = (destination: NonNullable<HarvestModalState>["destinations"][number], claimAmt: bigint) => {
+    const payout = claimAmt * destination.payoutBps / 10000n;
+    return `${Number(10000n - destination.payoutBps) / 100}% penalty · ${formatUnits(payout, 18)} DEGEN${payout < destination.minimum ? ` · minimum payout ${formatUnits(destination.minimum, 18)}` : ""}`;
   };
 
   // ── Actions ────────────────────────────────────────────────────────────────
@@ -1436,7 +1504,8 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
     const v = inputs[idx]?.trim();
     if (!v || !(Number(v) > 0)) return null;
     try {
-      return parseUnits(v, 18);
+      if (!/^(0|[1-9]\d*)(\.\d+)?$/.test(v)) return null;
+      return parseUnits(v, farms[idx]?.decimals ?? DEGEN_FARMS[idx].dec);
     } catch {
       return null;
     }
@@ -1444,15 +1513,20 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
 
   async function approveFarm(d: FarmData) {
     if (!d.lpAddr || !wallet.address) return;
-    const amt = inputAmountWei(d.idx) || MaxUint256;
-    setBusy((b) => ({ ...b, [d.idx]: true }));
+    const amt = inputAmountWei(d.idx);
+    if (!amt) { setFarmStatus(d.idx, "Enter the LP amount to approve.", "err"); return; }
+    if (!beginAction(d.idx)) return;
     try {
       const signer = await wallet.getSigner();
-      const lp = new Contract(d.lpAddr, ERC20_ABI, signer);
-      setFarmStatus(d.idx, "Confirm approval in wallet…", "active");
+      const lp = new Contract(d.lpAddr, [...ERC20_ABI, ...TOKEN_DEC_ABI], signer);
+      const vault = new Contract(d.farm.addr, DEGEN_VAULT_ABI, signer);
+      const [token, decimals] = await Promise.all([vault.stakeToken(), lp.decimals()]);
+      if (String(token).toLowerCase() !== d.lpAddr.toLowerCase() || Number(decimals) !== d.decimals) throw new Error("Farm token changed. Select the farm again.");
+      await lp.approve.staticCall(d.farm.addr, amt);
+      setFarmStatus(d.idx, "", "");
       const tx = await lp.approve(d.farm.addr, amt);
-      setFarmStatus(d.idx, "Approval submitted — confirming…", "active");
-      await tx.wait();
+      setFarmStatus(d.idx, "", "");
+      await confirmTransaction(tx);
       patchFarm(d.idx, { allowanceRaw: amt });
       await refreshFarm(d);
       setFarmStatus(d.idx, "✓ Approved", "ok");
@@ -1461,12 +1535,12 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
       setFarmStatus(d.idx, "✗ " + friendlyTxError(err), "err");
       clearFarmStatusSoon(d.idx);
     } finally {
-      setBusy((b) => ({ ...b, [d.idx]: false }));
+      endAction(d.idx);
     }
   }
 
   async function stakeFarm(d: FarmData) {
-    if (!wallet.address) return;
+    if (!wallet.address || busy[d.idx]) return;
     const amount = inputAmountWei(d.idx);
     if (!amount) {
       setFarmStatus(d.idx, "✗ Enter an amount first", "err");
@@ -1483,188 +1557,128 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
       clearFarmStatusSoon(d.idx, 5000);
       return;
     }
-    setBusy((b) => ({ ...b, [d.idx]: true }));
+    if (!beginAction(d.idx)) return;
     try {
       const signer = await wallet.getSigner();
+      if (!d.lpAddr) throw new Error("Farm token is unavailable.");
       const c = new Contract(d.farm.addr, DEGEN_VAULT_ABI, signer);
-      setFarmStatus(d.idx, "Confirm in wallet…", "active");
+      const lp = new Contract(d.lpAddr, [...ERC20_ABI, ...TOKEN_DEC_ABI], signer);
+      const account = await signer.getAddress();
+      const [currentToken, decimals, currentBalance, allowance, fee] = await Promise.all([
+        c.stakeToken(), lp.decimals(), lp.balanceOf(account), lp.allowance(account, d.farm.addr), c.depositFee(),
+      ]);
+      if (String(currentToken).toLowerCase() !== d.lpAddr.toLowerCase() || Number(decimals) !== d.decimals) throw new Error("Farm token changed. Select the farm again.");
+      if (amount > currentBalance) throw new Error("Amount exceeds your current LP balance.");
+      if (amount > allowance) throw new Error("Approve this LP amount before staking.");
+      if (d.depositFeeBps === null || BigInt(fee) !== d.depositFeeBps) {
+        patchFarm(d.idx, { depositFeeBps: BigInt(fee) });
+        throw new Error("Deposit fee changed. Check the updated farm terms.");
+      }
+      await c.deposit.staticCall(amount, ZeroAddress);
+      setFarmStatus(d.idx, "", "");
       const tx = await c.deposit(amount, ZeroAddress);
-      setFarmStatus(d.idx, "Stake submitted — confirming…", "active");
-      await tx.wait();
+      setFarmStatus(d.idx, "", "");
+      await confirmTransaction(tx);
       await refreshFarm(d);
-      setFarmStatus(d.idx, "✓ Staked!", "ok");
+      setInputs((prev) => ({ ...prev, [d.idx]: "" }));
+      setOpenStakes((prev) => ({ ...prev, [d.idx]: true }));
+      setFarmStatus(d.idx, "✓ New stake created!", "ok");
       clearFarmStatusSoon(d.idx);
     } catch (err) {
       setFarmStatus(d.idx, "✗ " + friendlyTxError(err), "err");
       clearFarmStatusSoon(d.idx);
     } finally {
-      setBusy((b) => ({ ...b, [d.idx]: false }));
+      endAction(d.idx);
     }
   }
 
-  async function unstakeFarm(d: FarmData) {
-    if (!wallet.address) return;
-    if (!(d.stakeCount > 0)) {
-      setFarmStatus(d.idx, "✗ No active stake to withdraw", "err");
-      clearFarmStatusSoon(d.idx, 4000);
-      return;
-    }
-    const target = inputAmountWei(d.idx);
-    const exceedsStake =
-      target &&
-      (d.totalStakedRaw != null
-        ? target > d.totalStakedRaw
-        : d.totalStaked > 0 && Number(formatUnits(target, 18)) > d.totalStaked * 1.000001);
-    if (exceedsStake) {
-      setFarmStatus(d.idx, "✗ Amount exceeds staked balance", "err");
-      clearFarmStatusSoon(d.idx);
-      return;
-    }
-    setBusy((b) => ({ ...b, [d.idx]: true }));
+  async function withdrawStake(d: FarmData, stake: FarmStake) {
+    if (!wallet.address || busy[d.idx]) return;
+    if (!beginAction(d.idx)) return;
     try {
       const signer = await wallet.getSigner();
-      const provider = await getPublicProvider();
       const cW = new Contract(d.farm.addr, DEGEN_VAULT_ABI, signer);
-      const cR = new Contract(d.farm.addr, DEGEN_VAULT_ABI, provider);
-      const n = Number(await cR.getNrOfStakes(wallet.address));
-      if (!(n > 0)) {
-        setFarmStatus(d.idx, "✗ No active stake to withdraw", "err");
-        clearFarmStatusSoon(d.idx);
-        return;
-      }
-      const amounts = await Promise.all(
-        Array.from({ length: n }, (_, s) =>
-          cR.userInfo(wallet.address, s)
-            .then((u: { amount: bigint }) => BigInt(u.amount))
-            .catch(() => 0n),
-        ),
-      );
-      let withdrawn = 0n,
-        txCount = 0;
-      for (let s = n - 1; s >= 0; s--) {
-        if (target && withdrawn >= target) break;
-        setFarmStatus(d.idx, `Confirm withdrawal ${txCount + 1} in wallet… (stake #${s})`, "active");
-        const tx = await cW.withdraw(s);
-        setFarmStatus(d.idx, "Unstake submitted — confirming…", "active");
-        await tx.wait();
-        withdrawn += amounts[s];
-        txCount++;
-      }
+      setFarmStatus(d.idx, "", "");
+      const tx = await withdrawSelectedStake({
+        getNrOfStakes: (user) => cW.getNrOfStakes(user),
+        userInfo: (user, id) => cW.userInfo(user, id),
+        withdraw: async (id) => { await cW.withdraw.staticCall(id); return cW.withdraw(id); },
+      }, wallet.address, stake);
+      setFarmStatus(d.idx, "", "");
+      await confirmTransaction(tx);
+      patchFarm(d.idx, { stakes: [], stakeCountKnown: false });
       await refreshFarm(d);
-      const lpOut = fmtFullReward(Number(formatUnits(withdrawn, 18)));
       setFarmStatus(
         d.idx,
-        `✓ Unstaked ${lpOut} LP across ${txCount} stake${txCount === 1 ? "" : "s"} — rewards added to your claimable balance`,
+        `✓ Stake #${stake.id} withdrawn — rewards added to your claimable balance`,
         "ok",
       );
       clearFarmStatusSoon(d.idx, 8000);
     } catch (err) {
+      if (err instanceof StakeChangedError) await refreshFarm(d);
       setFarmStatus(d.idx, "✗ " + friendlyTxError(err), "err");
       clearFarmStatusSoon(d.idx);
     } finally {
-      setBusy((b) => ({ ...b, [d.idx]: false }));
+      endAction(d.idx);
     }
   }
 
-  async function harvestFarm(d: FarmData) {
-    if (!wallet.address) {
-      alert("Connect your wallet first");
-      return;
-    }
-    if ((d.pendingDegen || 0) <= 1e-8) {
-      setFarmStatus(d.idx, "No DEGEN to claim", "err");
-      clearFarmStatusSoon(d.idx);
-      return;
-    }
-    setBusy((b) => ({ ...b, [d.idx]: true }));
-    setFarmStatus(d.idx, "Check wallet…", "active");
+  async function harvestFarm(d: FarmData | null) {
+    if (!wallet.address || !activeRef.current || (d && busy[d.idx])) return;
+    const idx = d?.idx ?? -1;
+    if (claimSubmissionLock.current || !beginAction(idx)) return;
+    claimSubmissionLock.current = true;
+    const session = claimGeneration.current;
+    const current = () => activeRef.current && session === claimGeneration.current;
+    const assertCurrent = () => { if (!current()) throw new Error("Cancelled"); };
+    let confirmed = false;
     try {
-      const { into: harvestInto, amount: chosenAmount } = await pickHarvestDest(
-        d.pendingDegen || 0,
-      );
-      const signer = await wallet.getSigner();
-      const stakeIDs =
-        d.claimableStakeIds && d.claimableStakeIds.length > 0
-          ? d.claimableStakeIds
-          : Array.from({ length: Math.max(1, d.stakeCount || 1) }, (_, i) => BigInt(i));
-      const helper = new Contract(DEGEN_REWARDS_HELPER, DEGEN_REWARDS_HELPER_ABI, signer);
-      const claimAmount = rewardAmountToWei(chosenAmount || d.pendingDegen || 0);
-      setFarmStatus(d.idx, "Confirm claim/stake in wallet…", "active");
-      const tx = await helper.claimWithHarvest(
-        [d.farm.addr],
-        wallet.address,
-        [stakeIDs],
-        claimAmount,
-        harvestInto,
-      );
-      setFarmStatus(d.idx, "Confirming claim/stake…", "active");
-      await tx.wait();
-      const okMsg =
-        harvestInto.toLowerCase() === wallet.address.toLowerCase()
-          ? "✓ Claimed!"
-          : "✓ Claimed and staked!";
-      patchFarm(d.idx, { pendingDegen: 0, pendingUsd: null, claimableStakeIds: [] });
-      await refreshFarm(d);
-      setFarmStatus(d.idx, okMsg, "ok");
-      clearFarmStatusSoon(d.idx);
-    } catch (e) {
-      if ((e as Error).message === "Cancelled") {
-        setFarmStatus(d.idx, "");
-      } else {
-        setFarmStatus(d.idx, friendlyTxError(e), "err");
-        clearFarmStatusSoon(d.idx);
-      }
-    } finally {
-      setBusy((b) => ({ ...b, [d.idx]: false }));
-    }
-  }
-
-  async function claimAllRewards() {
-    if (!wallet.address) return;
-    const loadedFarms = farms.filter((d): d is FarmData => !!d);
-    const pendingFarms = loadedFarms.filter((d) => (d.pendingDegen || 0) > 1e-8);
-    const pending = pendingFarms.reduce((s, d) => s + d.pendingDegen, 0);
-    const total = (helperCredit || 0) + pending;
-    if (!(total > 1e-8)) return;
-    const setS = (msg: string, cls = "") => setBannerStatus({ msg, cls });
-    try {
-      const { into: dest, amount: chosenAmount } = await pickHarvestDest(total);
-      const claimAmt = chosenAmount || total;
+      const account = wallet.address;
+      const provider = await getPublicProvider();
+      const publicHelper = new Contract(DEGEN_REWARDS_HELPER, DEGEN_REWARDS_HELPER_ABI, provider);
+      const initial = await readFreshClaim(d);
+      assertCurrent();
+      if (!d) setAllClaimRaw(initial.totalRaw);
+      if (initial.totalRaw <= 0n) throw new Error("No rewards are currently available to claim.");
+      const chosen = await pickHarvestDest(initial.totalRaw, publicHelper, d?.farm.name ?? null);
+      assertCurrent();
+      const fresh = await readFreshClaim(d);
+      assertCurrent();
+      if (!d) setAllClaimRaw(fresh.totalRaw);
+      const currentTerms = await readClaimDestinations(publicHelper);
+      const terms = currentTerms.find(destination => (destination.addr || account).toLowerCase() === chosen.into.toLowerCase());
+      if (!terms || terms.payoutBps !== chosen.payoutBps || terms.minimum !== chosen.minimum || terms.minimumServe !== chosen.minimumServe) throw new Error("Claim terms changed. Choose the destination again.");
+      // Max means the complete currently harvestable total, including helper credit once.
+      const amount = chosen.amount === initial.totalRaw ? fresh.totalRaw : chosen.amount;
+      if (amount <= 0n) throw new Error("No rewards are currently available to claim.");
+      if (amount > fresh.totalRaw) throw new Error("Available rewards changed. Choose the claim amount again.");
+      const payout = amount * terms.payoutBps / 10000n;
+      if (payout <= 0n || payout < terms.minimum) throw new Error("Claim amount is below the destination minimum.");
+      assertCurrent();
       const signer = await wallet.getSigner();
       const helper = new Contract(DEGEN_REWARDS_HELPER, DEGEN_REWARDS_HELPER_ABI, signer);
-      setS("Confirm in wallet…", "active");
+      const addresses = fresh.snapshot.farms.map(farm => farm.address);
+      const stakeIDs = fresh.snapshot.farms.map(farm => farm.stakeIds);
       let tx;
-      if (pendingFarms.length) {
-        tx = await helper.claimWithHarvest(
-          pendingFarms.map((d) => d.farm.addr),
-          wallet.address,
-          pendingFarms.map((d) =>
-            d.claimableStakeIds && d.claimableStakeIds.length
-              ? d.claimableStakeIds
-              : Array.from({ length: Math.max(1, d.stakeCount || 1) }, (_, i) => BigInt(i)),
-          ),
-          rewardAmountToWei(claimAmt),
-          dest,
-        );
+      if (addresses.length) {
+        await helper.claimWithHarvest.staticCall(addresses, account, stakeIDs, amount, chosen.into);
+        assertCurrent();
+        tx = await helper.claimWithHarvest(addresses, account, stakeIDs, amount, chosen.into);
       } else {
-        tx = await helper.claimRewards(rewardAmountToWei(claimAmt), dest);
+        await helper.claimRewards.staticCall(amount, chosen.into);
+        assertCurrent();
+        tx = await helper.claimRewards(amount, chosen.into);
       }
-      setS("Confirming…", "active");
-      await tx.wait();
-      pendingFarms.forEach((d) =>
-        patchFarm(d.idx, { pendingDegen: 0, pendingUsd: null, claimableStakeIds: [] }),
-      );
-      await fetchHelperCredit();
-      setS("✓ Claimed!", "ok");
-      setTimeout(() => setS(""), 6000);
-    } catch (e) {
-      if ((e as Error).message === "Cancelled") {
-        setS("");
-        return;
-      }
-      setS("✗ " + friendlyTxError(e), "err");
-      setTimeout(() => setS(""), 8000);
-    }
+      await confirmTransaction(tx);
+      confirmed = true;
+      // A failed display refresh must not turn a confirmed claim into a reported failure.
+      if (d) await refreshFarm(d).catch(() => undefined);
+      await fetchHelperCredit().catch(() => undefined);
+      try { const after = await readFreshClaim(null); if (current()) setAllClaimRaw(after.totalRaw); } catch { /* Background polling retries. */ }
+      if (current()) { setFarmStatus(idx, "Claim confirmed.", "ok"); clearFarmStatusSoon(idx); }
+    } catch (error) {
+      if (current()) { setFarmStatus(idx, (error as Error).message === "Cancelled" ? "" : confirmed ? "Claim confirmed. Balances will update shortly." : friendlyTxError(error), confirmed ? "ok" : "err"); clearFarmStatusSoon(idx); }
+    } finally { claimSubmissionLock.current = false; endAction(idx); }
   }
 
   async function toggleBreakdown(d: FarmData) {
@@ -1702,7 +1716,7 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
     try {
       if (d?.lpAddr) {
         if ((d.farm?.tokens?.length || 0) === 2) {
-          const info = await getLpPairInfo(d.lpAddr, 18);
+          const info = await getLpPairInfo(d.lpAddr, d.decimals);
           if (info?.token0 && info?.token1)
             url = `${pulsexAddUrlForFarm(d.farm)}/${info.token0}/${info.token1}`;
         } else {
@@ -1732,66 +1746,46 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
   }
 
   // ── Live values ─────────────────────────────────────────────────────────────
-  const livePending = (d: FarmData) =>
-    (d.pendingDegen || 0) > 0 && (d.dailyReward || 0) > 0
-      ? d.pendingDegen + d.dailyReward * ((Date.now() - d.ts) / 86400000)
-      : d.pendingDegen || 0;
-  const liveAnnual = (d: FarmData) =>
-    (d.annualRewardTokens || 0) > 0
-      ? d.annualRewardTokens! + d.annualRewardTokens! * ((Date.now() - d.ts) / 31536000000)
-      : d.annualRewardTokens || 0;
+  const livePending = (d: FarmData) => d.pendingDegen;
+  const liveAnnual = (d: FarmData) => d.annualRewardTokens ?? 0;
 
   // ── Render ─────────────────────────────────────────────────────────────────
   const loadedFarms = farms.filter((d): d is FarmData => !!d);
-  const bannerTs = loadedFarms.length ? Math.min(...loadedFarms.map((d) => d.ts)) : Date.now();
-  const pendingSum = loadedFarms.reduce((s, d) => s + (d.pendingDegen || 0), 0);
-  const dailySum = loadedFarms.reduce((s, d) => s + (d.dailyReward || 0), 0);
-  const bannerTotal = (helperCredit || 0) + pendingSum;
-  const liveBannerTotal =
-    bannerTotal > 0 && dailySum > 0
-      ? bannerTotal + dailySum * ((Date.now() - bannerTs) / 86400000)
-      : bannerTotal;
+  const summaryReady = loadedFarms.length === DEGEN_FARMS.length;
+  const bannerTotal = allClaimRaw === null ? 0 : Number(formatUnits(allClaimRaw, 18));
+  const liveBannerTotal = bannerTotal;
   const totalUserStakedUsd = loadedFarms.reduce(
     (sum, d) => sum + (Number.isFinite(d.stakedUsd) ? Number(d.stakedUsd) : 0),
     0,
   );
-  const claimableFarms = loadedFarms.filter((d) => (d.pendingDegen || 0) > 1e-8);
+  const stakeCountLabel = summaryReady
+    ? farmStakeCountLabel(loadedFarms.map((d) => d.stakeCountKnown ? d.stakeCount : null))
+    : "Loading stake counts…";
   const rewardPriceUsd =
     loadedFarms.find((d) => (d.rewardPriceUsd || 0) > 0)?.rewardPriceUsd || null;
-  const knownPendingUsd = loadedFarms.reduce(
-    (sum, d) => sum + (Number.isFinite(d.pendingUsd) ? Number(d.pendingUsd) : 0),
-    0,
-  );
-  const totalClaimableUsd = rewardPriceUsd
-    ? liveBannerTotal * rewardPriceUsd
-    : bannerTotal <= 1e-8
-      ? 0
-      : knownPendingUsd > 0
-        ? knownPendingUsd
-        : null;
-  const formatFarmSummaryUsd = (value: number | null) =>
-    value === null ? "Loading" : `$${fmtFullReward(value)} USD`;
+  const totalClaimableUsd = allClaimRaw !== null && rewardPriceUsd ? liveBannerTotal * rewardPriceUsd : null;
+  const formatFarmSummaryUsd = (value: number | null) => value === null ? "—" : `$${fmtFullReward(value)} USD`;
+  const claimableRewardValue = allClaimRaw === null ? "—" : `${formatClaimableAmount(allClaimRaw)} DEGEN`;
+
+  const claimableRewardUsd =
+    liveBannerTotal > 1e-8 && totalClaimableUsd !== null
+      ? formatFarmSummaryUsd(totalClaimableUsd)
+      : null;
 
   const visible = stakedOnly ? loadedFarms.filter(isActiveDegenFarm) : loadedFarms;
-  const sortedVisible = visible
-    .slice()
-    .sort((a, b) => {
-      const aa = Number.isFinite(Number(a?.apr)) ? Number(a.apr) : -1;
-      const bb = Number.isFinite(Number(b?.apr)) ? Number(b.apr) : -1;
-      return bb - aa;
-    });
+  const sortedVisible = visible.slice().sort((a, b) => a.idx - b.idx);
 
   const totalTvl = loadedFarms.reduce((sum, d) => {
     const tvl = Number(d?.tvlUsd || 0);
     return Number.isFinite(tvl) && tvl > 0 ? sum + tvl : sum;
   }, 0);
   const totalTvlText =
-    totalTvl > 0
+    summaryReady && loadedFarms.every(d => d.tvlUsd !== null)
       ? `$${totalTvl.toLocaleString(undefined, {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
         })}`
-      : "Loading";
+      : "—";
 
   useEffect(() => {
     if (totalTvl <= 0 || loadedFarms.length < DEGEN_FARMS.length) {
@@ -1818,7 +1812,6 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
                 className="farm-highlight-row"
                 role="button"
                 tabIndex={0}
-                title={`Go to ${d.farm.name}`}
                 onClick={() => goToFarm(d.idx)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
@@ -1845,13 +1838,31 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
     );
   };
 
+  async function reloadStakes(d: FarmData) {
+    if (!beginAction(d.idx)) return;
+    try { await refreshFarm(d); }
+    finally { endAction(d.idx); }
+  }
+
+  const renderStakes = (d: FarmData) => (
+    <FarmStakes
+      stakes={d.stakes ?? []}
+      count={d.stakeCountKnown ? d.stakeCount : null}
+      decimals={d.decimals}
+      open={!!openStakes[d.idx]}
+      busy={!!busy[d.idx]}
+      onToggle={() => setOpenStakes((prev) => ({ ...prev, [d.idx]: !prev[d.idx] }))}
+      onWithdraw={(stake) => void withdrawStake(d, stake)}
+      onRefresh={() => void reloadStakes(d)}
+    />
+  );
+
   const renderCard = (d: FarmData) => {
     const pendingLive = livePending(d);
-    const pendingStr = fmtFullReward(pendingLive);
+    const pendingStr = d.pendingKnown ? fmtFullReward(pendingLive) : "—";
     const stakedStr = fmtLpAmount(d.totalStaked || 0);
     const isActive = isActiveDegenFarm(d);
-    const stakedLabel =
-      d.totalStaked > 1e-10 ? stakedStr : isActive ? "Unknown" : "—";
+    const stakedLabel = !farmStakeAmountsKnown(d) ? "—" : stakedStr;
     const tvlStr =
       (d.tvlUsd || 0) > 0
         ? "$" + fmtFullReward(d.tvlUsd!) + " USD"
@@ -1883,34 +1894,32 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
       d.walletBal !== null && d.walletBal !== undefined ? fmtLpAmount(d.walletBal) : "—";
     const walletSub = fmtUsd(d.walletUsd) || "LP in wallet";
     const annualLive = liveAnnual(d);
-    const annualStr = (d.annualRewardTokens || 0) > 0 ? fmtFullReward(annualLive) : "—";
+    const annualStr = d.annualRewardTokens !== null ? fmtFullReward(annualLive) : "—";
     const annualSub = fmtUsd(d.annualRewardsUsd) || "DEGEN / year";
-    const pctStr =
-      (d.stakedPct || 0) > 0
-        ? (d.stakedPct! >= 10 ? d.stakedPct!.toFixed(1) : d.stakedPct!.toFixed(2)) + "%"
-        : "0%";
-    const stakedSub =
-      (d.stakedUsd || 0) > 0 ? `${fmtUsd(d.stakedUsd)} (${pctStr})` : "$0.00 USD (0%)";
-    const pendingSub = fmtUsd(d.pendingUsd) || "$0.00 USD";
+    const pctStr = d.stakedPct !== null
+      ? (d.stakedPct >= 10 ? d.stakedPct.toFixed(1) : d.stakedPct.toFixed(2)) + "%" : "—";
+    const stakedSub = !farmStakeAmountsKnown(d) ? "Unavailable"
+      : d.totalStakedRaw === 0n ? "$0.00 USD (0%)" : d.stakedUsd !== null ? `${fmtUsd(d.stakedUsd)} (${pctStr})` : "USD value unavailable";
+    const pendingSub = fmtUsd(d.pendingUsd) || (d.pendingKnown && d.pendingDegen === 0 ? "$0.00 USD" : "—");
     const status = statuses[d.idx];
     const breakdown = breakdowns[d.idx];
     const isBusy = !!busy[d.idx];
     const amtWei = inputAmountWei(d.idx);
     const approveLabel = amtWei
-      ? "Approve " + fmtFullReward(Number(formatUnits(amtWei, 18)))
-      : "Approve MAX";
+      ? "Approve " + fmtFullReward(Number(formatUnits(amtWei, d.decimals)))
+      : "Approve LP amount";
 
     return (
       <div
         key={d.idx}
         className="browse-farm-card degen-farm-card"
         id={`farm-card-degen-${d.idx}`}
-        style={{ "--bfc-color": "var(--red)" } as CSSProperties}
+        style={{ "--bfc-color": "var(--accent)" } as CSSProperties}
       >
         <div className="bfc-head">
           <FarmTokenPair tokens={d.farm.tokens} />
           <div className="bfc-title-wrap">
-            <div className="bfc-name">{d.farm.name}</div>
+            <div className="bfc-name-row"><div className="bfc-name">{d.farm.name}</div><CopyAddress compact address={d.farm.addr} label={`${d.farm.name} contract address`} /></div>
             <div className="bfc-sub">{farmProtocolLabel(d.farm)}</div>
           </div>
           {liqHref ? (
@@ -1931,17 +1940,6 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
               <AprBreakdownPop apr={d.apr} />
             </div>
           </div>
-          <div
-            className="bfc-stat-cell bfc-compact"
-            title="Reward Allocation — share of total emissions (governance vote)"
-          >
-            <span className="bfc-stat-label">Alloc</span>
-            <span className="bfc-stat-val">{allocStr}</span>
-          </div>
-          <div className="bfc-stat-cell bfc-compact">
-            <span className="bfc-stat-label">Fees</span>
-            <span className="bfc-stat-val">0% / 0%</span>
-          </div>
         </div>
         <div className="bfc-stats-grid">
           <div className="bfc-stat-cell">
@@ -1959,7 +1957,7 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
                     ...prev,
                     [d.idx]:
                       d.walletBalRaw !== null && d.walletBalRaw !== undefined
-                        ? formatUnits(d.walletBalRaw, 18)
+                        ? formatUnits(d.walletBalRaw, d.decimals)
                         : String(d.walletBal || 0),
                   }));
                 }}
@@ -1970,7 +1968,7 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
             <span className="bfc-stat-sub">{walletSub}</span>
           </div>
           <div className="bfc-stat-cell">
-            <span className="bfc-stat-label">Annual Rewards</span>
+            <span className="bfc-stat-label">Pool Annual Rewards</span>
             <span className="bfc-stat-val">{annualStr}</span>
             <div className="bfc-stat-sub">
               <img
@@ -1998,29 +1996,19 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
             <div className="bfc-stat-balance-row">
               <span className="bfc-stat-val">
                 {stakedLabel}
-                <span className="bfc-stat-tok">{d.totalStaked > 1e-10 ? "LP" : ""}</span>
+                <span className="bfc-stat-tok">{farmStakeAmountsKnown(d) ? "LP" : ""}</span>
               </span>
               <button
                 className="bfc-stat-max"
-                disabled={!(actionsEnabled && d.totalStaked > 1e-10)}
-                onClick={() => {
-                  setInputs((prev) => ({
-                    ...prev,
-                    [d.idx]:
-                      d.totalStakedRaw != null && d.totalStakedRaw > 0n
-                        ? formatUnits(d.totalStakedRaw, 18)
-                        : (d.totalStaked || 0) > 1e-10
-                          ? d.totalStaked.toFixed(6).replace(/\.?0+$/, "")
-                          : "",
-                  }));
-                }}
+                disabled={!d.stakeCountKnown || d.stakeCount === 0}
+                onClick={() => setOpenStakes((prev) => ({ ...prev, [d.idx]: true }))}
               >
-                [MAX]
+                [VIEW]
               </button>
             </div>
             <span className="bfc-stat-sub">{stakedSub}</span>
           </div>
-          <div className="bfc-stat-cell">
+          <div className="bfc-stat-cell bfc-rewards-cell">
             <span className="bfc-stat-label">Rewards</span>
             <div className="bfc-stat-reward-line">
               <img
@@ -2031,9 +2019,10 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
                 }}
               />
               <span className="bfc-stat-val bfc-stat-accent">
-                <span>{pendingStr}</span> DEGEN
+                <span className="bfc-reward-amount">{pendingStr}</span>
+                <span className="bfc-reward-symbol">DEGEN</span>
               </span>
-              <RewardsProjectionPop d={d} />
+              {farmStakeAmountsKnown(d) && <RewardsProjectionPop d={d} />}
             </div>
             <span className="bfc-stat-sub">{pendingSub}</span>
           </div>
@@ -2071,8 +2060,8 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
           </div>
         )}
         {(d.pendingDegen || 0) > 1e-8 ? (
-          <button className="bfc-harvest-btn" disabled={isBusy} onClick={() => void harvestFarm(d)}>
-            Claim {pendingStr} DEGEN
+          <button className="bfc-harvest-btn" aria-label={`Claim ${pendingStr} DEGEN from ${d.farm.name}`} disabled={isBusy} onClick={() => void harvestFarm(d)}>
+            Claim
           </button>
         ) : (
           <button className="bfc-harvest-btn" disabled>
@@ -2085,7 +2074,8 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
             type="number"
             min="0"
             step="any"
-            placeholder="Amount"
+            placeholder="Deposit amount · LP"
+            aria-label={`New stake LP amount for ${d.farm.name}`}
             disabled={!actionsEnabled || isBusy}
             value={inputs[d.idx] || ""}
             onChange={(event) =>
@@ -2094,13 +2084,13 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
           />
           <button
             className="bfc-max"
-            disabled={!actionsEnabled || isBusy}
+            disabled={!actionsEnabled || isBusy || d.walletBalRaw === null}
             onClick={() =>
               setInputs((prev) => ({
                 ...prev,
                 [d.idx]:
                   d.walletBalRaw !== null && d.walletBalRaw !== undefined
-                    ? formatUnits(d.walletBalRaw, 18)
+                    ? formatUnits(d.walletBalRaw, d.decimals)
                     : String(d.walletBal || 0),
               }))
             }
@@ -2108,9 +2098,13 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
             MAX
           </button>
         </div>
+        <p className="farm-deposit-estimate" aria-live="polite">{amtWei && d.depositFeeBps !== null
+          ? `Estimated new stake: ${formatUnits(amtWei - amtWei * d.depositFeeBps / 10000n, d.decimals)} LP · deposit fee ${Number(d.depositFeeBps) / 100}%`
+          : ""}</p>
         <div className="bfc-action-grid">
           <button
             className="bfc-stake-btn"
+            aria-label="Create New Stake"
             disabled={!actionsEnabled || isBusy}
             onClick={() => void stakeFarm(d)}
           >
@@ -2118,8 +2112,10 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
           </button>
           <button
             className="bfc-unstake-btn"
-            disabled={!(actionsEnabled && d.stakeCount > 0) || isBusy}
-            onClick={() => void unstakeFarm(d)}
+            aria-label="Unstake from a selected stake"
+            aria-expanded={!!openStakes[d.idx]}
+            disabled={isBusy}
+            onClick={() => setOpenStakes((prev) => ({ ...prev, [d.idx]: !prev[d.idx] }))}
           >
             Unstake
           </button>
@@ -2131,12 +2127,14 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
         >
           {approveLabel}
         </button>
+        {renderStakes(d)}
         <div className={`bfc-status${status?.cls ? " " + status.cls : ""}`}>
           {status?.msg || ""}
         </div>
         <div className="bfc-bottom-line">
+          <span>Allocation: <b>{allocStr}</b></span>
           <span>
-            Time Left:{" "}
+            Emissions:{" "}
             <b>{farmTimeLeftNode(d.annualRewardTokens, d.officialStats?.rewardAllocation)}</b>
           </span>
           <span>
@@ -2149,12 +2147,13 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
   };
 
   const renderTableRow = (d: FarmData) => {
-    const stakedLabel = d.totalStaked > 1e-10 ? fmtLpAmount(d.totalStaked) : "—";
-    const pendingStr = fmtFullReward(livePending(d));
+    const stakedLabel = !farmStakeAmountsKnown(d) ? "—" : fmtLpAmount(d.totalStaked);
+    const pendingStr = d.pendingKnown ? fmtFullReward(livePending(d)) : "—";
     const walletStr =
       d.walletBal !== null && d.walletBal !== undefined ? fmtLpAmount(d.walletBal) : "—";
     return (
-      <tr key={d.idx}>
+      <Fragment key={d.idx}>
+      <tr>
         <td>
           <div className="farm-table-farm">
             <FarmTokenPair tokens={d.farm.tokens} />
@@ -2190,6 +2189,7 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
             type="button"
             onClick={() => {
               setView("grid");
+              setOpenStakes((prev) => ({ ...prev, [d.idx]: true }));
               goToFarm(d.idx);
             }}
           >
@@ -2197,21 +2197,32 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
           </button>
         </td>
       </tr>
+      <tr className="farm-table-stakes-row">
+        <td colSpan={5}>
+          {renderStakes(d)}
+          {openStakes[d.idx] && statuses[d.idx]?.msg && (
+            <div className={`bfc-status ${statuses[d.idx].cls}`}>{statuses[d.idx].msg}</div>
+          )}
+        </td>
+      </tr>
+      </Fragment>
     );
   };
 
   const hdModal = harvestModal && (
-    <div id="harvestDestModal" className="modal-overlay">
-      <div className="modal-box" style={{ maxWidth: 400 }}>
-        <div className="modal-title">Harvest Rewards</div>
+    <div id="harvestDestModal" className="farm-action-panel">
+      <div className="modal-box" role="dialog" aria-label="Harvest Rewards" style={{ maxWidth: 440 }}>
+        <div className="modal-title">{harvestModal.farmName ? "Claim Farm Rewards" : "Claim All Rewards"}</div>
         <div className="hd-available">
-          Your Available Rewards: {fmtFullReward(harvestModal.amount)} DEGEN
+          Available for this claim: {formatClaimableAmount(harvestModal.amountRaw)} DEGEN
         </div>
+        <p className="farm-deposit-estimate">{harvestModal.farmName ? `Includes rewards from ${harvestModal.farmName} and your already-collected rewards.` : "Collects rewards from all your farms in one claim."} Payouts below show destination penalties.</p>
         <div className="hd-amount-section">
           <div className="hd-amount-label">DEGEN To Claim:</div>
           <input
             type="text"
             className="modal-input hd-amount-input"
+            aria-label="DEGEN to claim"
             inputMode="decimal"
             value={harvestModal.input}
             onChange={(event) => {
@@ -2234,6 +2245,7 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
           <input
             type="range"
             className="hd-slider"
+            aria-label="Percent of available rewards"
             min="0"
             max="100"
             value={harvestModal.slider}
@@ -2241,13 +2253,11 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
               const slider = Number(event.target.value);
               setHarvestModal((prev) => {
                 if (!prev) return prev;
-                const pct = slider / 100;
-                const raw = (v: number) =>
-                  v >= 1000 ? String(Math.floor(v)) : String(Number(v.toFixed(4)));
+
                 return {
                   ...prev,
                   slider,
-                  input: prev.amount > 0 ? raw(prev.amount * pct) : "0",
+                  input: formatUnits(prev.amountRaw * BigInt(slider) / 100n, 18),
                 };
               });
             }}
@@ -2255,7 +2265,7 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
         </div>
         <div className="hd-dest-label">Harvest rewards into...</div>
         <div id="hd-options">
-          {HARVEST_DESTS_DEGEN.map((dest, i) => (
+          {harvestModal.destinations.map((dest, i) => (
             <label
               key={dest.label}
               className={`hd-opt${harvestModal.selected === i ? " selected" : ""}`}
@@ -2268,8 +2278,8 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
                   setHarvestModal((prev) => (prev ? { ...prev, selected: i } : prev))
                 }
               />
-              <span className="hd-opt-name">{dest.label}</span>
-              <span className={`hd-opt-pct${dest.payoutPct === 100 ? " hd-good" : " hd-bad"}`}>
+              <span className="hd-opt-name">{dest.label}{dest.minimumServe > 0n && <small>Minimum service: {(Number(dest.minimumServe) / 86400).toLocaleString(undefined, { maximumFractionDigits: 2 })} days</small>}</span>
+              <span className={`hd-opt-pct${dest.payoutBps === 10000n ? " hd-good" : " hd-bad"}`}>
                 {hdPctText(dest, hdCurrentAmount(harvestModal))}
               </span>
             </label>
@@ -2287,12 +2297,13 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
           </button>
           <button
             className="modal-btn-confirm"
+            disabled={hdCurrentAmount(harvestModal) <= 0n || hdCurrentAmount(harvestModal) * harvestModal.destinations[harvestModal.selected].payoutBps / 10000n < harvestModal.destinations[harvestModal.selected].minimum || harvestModal.destinations[harvestModal.selected].payoutBps === 0n}
             onClick={() => {
-              const dest = HARVEST_DESTS_DEGEN[harvestModal.selected];
+              const dest = harvestModal.destinations[harvestModal.selected];
               const amt = hdCurrentAmount(harvestModal);
               harvestModal.resolve({
                 into: dest.addr || wallet.address || "",
-                amount: amt > 0 ? amt : harvestModal.amount,
+                amount: amt, payoutBps: dest.payoutBps, minimum: dest.minimum, minimumServe: dest.minimumServe,
               });
               setHarvestModal(null);
             }}
@@ -2309,11 +2320,6 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
       <div className="rw-miners-section">
         {!wallet.address ? (
           <div className="rw-miners-loading">Connect your wallet to browse farms</div>
-        ) : loading && loadedFarms.length === 0 ? (
-          <div className="rw-miners-loading">
-            <span className="spinner" />
-            Loading DEGEN farms…
-          </div>
         ) : (
           <>
             <div>
@@ -2350,7 +2356,6 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
                   href="https://degenstrategy.github.io/interface/index.html"
                   target="_blank"
                   rel="noopener noreferrer"
-                  title="Open DegenStrategy farms"
                 >
                   <div className="farms-brand-logo">
                     <img src={TOKEN_LOGOS["DEGEN"]} alt="DEGEN" />
@@ -2371,7 +2376,7 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
                     className={`farm-view-btn ${view === "grid" ? "active" : ""}`}
                     type="button"
                     onClick={() => setView("grid")}
-                    title="Grid view"
+                    aria-label="Grid view"
                   >
                     ▦
                   </button>
@@ -2379,7 +2384,7 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
                     className={`farm-view-btn ${view === "table" ? "active" : ""}`}
                     type="button"
                     onClick={() => setView("table")}
-                    title="Table view"
+                    aria-label="Table view"
                   >
                     ☰
                   </button>
@@ -2389,41 +2394,28 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
                 <div className="farm-claimable-main">
                   <span>Total Staked:</span>
                   <span className="farm-summary-value">
-                    {formatFarmSummaryUsd(totalUserStakedUsd)}
+                    {summaryReady && loadedFarms.every(d => farmStakeAmountsKnown(d) && (d.totalStakedRaw === 0n || d.stakedUsd !== null)) ? formatFarmSummaryUsd(totalUserStakedUsd) : "—"}
                   </span>
                 </div>
                 <div className="farm-claimable-main">
                   <span>Total Claimable Rewards:</span>
                   <span className="farm-summary-value">
-                    {formatFarmSummaryUsd(totalClaimableUsd)}
+                    {claimableRewardValue}
+                    {claimableRewardUsd && (
+                      <span className="farm-summary-subvalue">{claimableRewardUsd}</span>
+                    )}
                   </span>
                 </div>
                 <div className="farm-claim-all-wrap">
-                  <span className="farm-positions-label">
-                    {claimableFarms.length} active position{claimableFarms.length === 1 ? "" : "s"}
-                  </span>
-                  <button
-                    className={`farm-claim-all-btn${bannerStatus.cls === "active" ? " claiming" : ""}`}
-                    type="button"
-                    onClick={() => void claimAllRewards()}
-                    disabled={bannerTotal <= 1e-8 || bannerStatus.cls === "active"}
-                  >
-                    Claim All
-                  </button>
-                  {bannerStatus.msg && (
-                    <span
-                      className={`bfc-status farm-claim-all-status${bannerStatus.cls ? " " + bannerStatus.cls : ""}`}
-                      aria-live="polite"
-                    >
-                      {bannerStatus.msg}
-                    </span>
-                  )}
+                  <span className="farm-positions-label">{stakeCountLabel}</span>
+                  <button className="bfc-harvest-btn farm-claim-all-btn" disabled={Object.values(busy).some(Boolean)} onClick={() => void harvestFarm(null)}>Claim All Rewards</button>
+                  {statuses[-1]?.msg && <span role="status" className={`bfc-status ${statuses[-1].cls}`}>{statuses[-1].msg}</span>}
                 </div>
               </div>
               {sortedVisible.length === 0 ? (
                 <div className={view === "table" ? "browse-farms-table-wrap" : "browse-farms-grid"}>
                   <div className="rw-miners-loading">
-                    No active DEGEN farms found. Toggle Staked off to browse all farms.
+                    {loading ? "Loading DEGEN farms…" : "No active DEGEN farms found. Toggle Staked off to browse all farms."}
                   </div>
                 </div>
               ) : view === "table" ? (
@@ -2442,7 +2434,9 @@ export function FarmsPage({ wallet }: { wallet: WalletState }) {
                   </table>
                 </div>
               ) : (
-                <div className="browse-farms-grid">{sortedVisible.map(renderCard)}</div>
+                <div className="browse-farms-grid">
+                  {sortedVisible.map(renderCard)}
+                </div>
               )}
             </div>
           </>

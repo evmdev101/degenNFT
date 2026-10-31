@@ -1,0 +1,55 @@
+.theme-window {
+  width: min(520px, calc(100vw - 24px));
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-family: 'DM Sans', sans-serif;
+}
+.theme-window-head { min-height: 48px; padding: 10px; border-color: var(--border); }
+.theme-window-head strong { font-size: 16px; font-weight: 700; }
+.theme-window-head button { min-width: 0; height: 28px; padding: 0 6px; border-radius: 6px; font: 500 10px/1 'DM Sans', sans-serif; }
+.theme-window-head button:last-child { padding-inline: 5px; }
+.theme-window-tabs { min-height: 50px; padding: 10px 14px; gap: 8px; border-color: var(--border); }
+.theme-window-tabs button { min-height: 0; padding: 7px 10px; font: 500 10px/1.4 'DM Sans', sans-serif; }
+.theme-window-body { margin: 10px; padding: 12px; scrollbar-gutter: auto; border-color: var(--border); }
+.theme-window-body h3 { margin: 0 0 10px; padding-bottom: 8px; border-color: var(--border); font: 700 14px/1.4 'DM Sans', sans-serif; }
+.theme-collection + .theme-collection { margin-top: 18px; }
+.theme-window .theme-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.theme-window .theme-swatch { min-width: 0; min-height: 48px; padding: 5px 2px; border: 2px solid var(--border); border-radius: 8px; font: 500 9px/1.2 'DM Sans', sans-serif; }
+.theme-window .theme-swatch.active { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
+.theme-swatch span { margin-bottom: 2px; }
+.theme-swatch i { flex: 0 0 14px; }
+.theme-window .theme-custom-grid { gap: 8px; }
+.theme-window .theme-custom-grid label { grid-template-columns: 1fr 44px 82px; gap: 10px; min-height: 52px; padding: 9px; border: 1px solid var(--border); border-radius: 7px; color: var(--fg); font-size: 11px; }
+.theme-window .theme-custom-grid code { display: block; font: 9px/1.4 'Fira Code', monospace; color: var(--fg); }
+.theme-window .theme-custom-grid input[type='color'] { width: 34px; height: 24px; padding: 0; border: 0; border-radius: 0; background: transparent; cursor: pointer; }
+.theme-window input[type='color']::-webkit-color-swatch-wrapper { padding: 0; }
+.theme-window input[type='color']::-webkit-color-swatch { border: 1px solid color-mix(in srgb, var(--fg) 45%, transparent); border-radius: 0; }
+.theme-window .theme-apply { min-height: 44px; margin-top: 12px; border-radius: 7px; color: var(--fg); font: 500 16px/1.4 'DM Sans', sans-serif; }
+.theme-window .theme-background-settings { margin-top: 16px; }
+.theme-window :is(.theme-select-row,.theme-range-row,.theme-check-row) { min-height: 46px; grid-template-columns: 1fr minmax(100px, 40%); gap: 14px; color: var(--fg); font-size: 11px; }
+.theme-window .theme-select-row select { justify-self: end; width: auto; max-width: 100%; height: 28px; padding: 0 8px; font-size: 11px; color: var(--fg); }
+.theme-window .theme-select-row input[type='color'] { justify-self: end; width: 64px; height: 32px; padding: 5px; border-radius: 4px; cursor: pointer; }
+.theme-window .theme-range-row input { margin: 0; min-width: 0; }
+@media (max-width: 480px) {
+  .theme-window .theme-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .theme-window .theme-custom-grid label { grid-template-columns: 1fr 34px 68px; gap: 6px; }
+}
+
+/* OINK's Obsidian star field is static and follows the background controls. */
+body.bg-pattern-starlight {
+  --starlight-star: color-mix(in srgb, var(--bg-effect-color, var(--fg)) calc(48% * var(--bg-effect-intensity, 1)), transparent);
+  background-image:
+    radial-gradient(circle at 23px 41px, var(--starlight-star) 0.6px, transparent 1.3px),
+    radial-gradient(circle at 157px 113px, var(--starlight-star) 0.8px, transparent 1.6px),
+    radial-gradient(circle at 71px 227px, var(--starlight-star) 0.5px, transparent 1.2px),
+    radial-gradient(circle at 347px 67px, color-mix(in srgb, var(--accent) calc(35% * var(--bg-effect-intensity, 1)), transparent) 0.6px, transparent 1.4px),
+    radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--fg) calc(4% * var(--bg-effect-intensity, 1)), transparent), transparent 65%);
+  background-size:
+    calc(227px * var(--bg-effect-size, 1)) calc(317px * var(--bg-effect-size, 1)),
+    calc(373px * var(--bg-effect-size, 1)) calc(419px * var(--bg-effect-size, 1)),
+    calc(557px * var(--bg-effect-size, 1)) calc(491px * var(--bg-effect-size, 1)),
+    calc(643px * var(--bg-effect-size, 1)) calc(593px * var(--bg-effect-size, 1)),
+    100% 100%;
+  background-attachment: fixed;
+}

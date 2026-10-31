@@ -1,25 +1,23 @@
-// My Miners tab — markup and styling restored verbatim from the original
-// single-file site (commit 825e9f2). Logic mirrors loadStakedMiners,
-// renderSummaryCards, minerCards/minerRows, the live miner ticker and the
-// hop / transfer / withdraw miner modals from the original inline script.
-import { Contract, formatEther, isAddress } from "ethers";
+import { HelpTip } from "../components/HelpTip";
+import { filterMiners, graceEndingSoon, minerDurationLabel, minerStatus, type MinerFilters } from "./minerFilters";
+import { confirmTransaction } from "../lib/transactions";
+// OINK-style portfolio layout with DEGEN's existing miner transaction paths.
+import { Contract, ZeroAddress, formatEther, isAddress, parseEther } from "ethers";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePageActive } from "../hooks/usePageActive";
+import "./miner-forms.css";
 import { CONTRACTS, ERC20_ABI } from "../config/contracts";
 import type { WalletState } from "../hooks/useWallet";
-import { getPublicProvider } from "../lib/chain";
+import { getPublicProvider, readableError } from "../lib/chain";
 
 // ── Constants from the original script ──────────────────────────────────────
-const MASTERCHEF2 = "0xC84FbE083713544BB4Ea85E2fe95148D076b2942"; // DEGEN pool
 const MASTERCHEF_ABI = [
   "function getNrOfStakes(address _user) view returns (uint256)",
   "function userInfo(address _address, uint256 _stakeID) view returns (uint256 shares, uint256 lastMineredTime, uint256 xvmcAtLastUserAction, uint256 lastUserActionTime, uint256 mandatoryTimeToServe)",
   "function getPricePerFullShare() view returns (uint256)",
   "function totalShares() view returns (uint256)",
   "function gracePeriod() view returns (uint256)",
-];
-const DTX_CHEF_ABI = [
-  "function poolLength() view returns (uint256)",
-  "function poolInfo(uint256) view returns (uint256 allocPoint, uint256 lastRewardBlock, address participant)",
+  "function withdrawFeePeriod() view returns (uint256)",
 ];
 const POOL_ACTION_ABI = [
   "function hopStakeToAnotherPool(uint256 _shares, uint256 _stakeID, address _poolAddress) external",
@@ -49,7 +47,6 @@ const HOP_POOLS = [
   { addr: "0xdE672FccA32365bD704c39bd1164a0D34a3a73e6", label: "10 Year", dur: 315360000 },
 ];
 
-const BLOCKS_PER_DAY = 8000;
 
 // ── Formatting helpers from the original script ──────────────────────────────
 function durLabel(sec: number) {
@@ -76,7 +73,7 @@ function fmtMinerWhole(n: number) {
 function fmtFullReward(n: number) {
   return Number(n || 0).toLocaleString(undefined, {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: 6,
   });
 }
 
@@ -104,65 +101,6 @@ async function fetchDegenPrice(): Promise<number | null> {
   }
 }
 
-type AllocMap = {
-  map: Map<string, { allocPoint: number; poolId: number }>;
-  totalAlloc: number;
-  rewardPerBlock: number;
-} | null;
-
-async function buildAllocMap(): Promise<AllocMap> {
-  try {
-    const provider = await getPublicProvider();
-    const mc = new Contract(MASTERCHEF2, DTX_CHEF_ABI, provider);
-    // totalAllocPoint / DTXPerBlock have non-standard selectors — raw eth_call
-    // like the original (verified selectors 0x17caf6f1 / 0x9cc34559)
-    const rpcCall = async (data: string) => {
-      const res = (await withTimeout(
-        fetch("https://rpc.pulsechain.com", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            method: "eth_call",
-            params: [{ to: MASTERCHEF2, data }, "latest"],
-            id: 1,
-          }),
-        }).then((r) => r.json()),
-        8000,
-      )) as { error?: { message: string }; result: string };
-      if (res.error) throw new Error(res.error.message);
-      return BigInt(res.result);
-    };
-    const [poolLen, totalAlloc, rpb] = await Promise.all([
-      mc.poolLength(),
-      rpcCall("0x17caf6f1"),
-      rpcCall("0x9cc34559"),
-    ]);
-    const n = Number(poolLen);
-    const poolInfos = await Promise.allSettled(
-      Array.from({ length: n }, (_, i) => mc.poolInfo(i)),
-    );
-    const map = new Map<string, { allocPoint: number; poolId: number }>();
-    poolInfos.forEach((r, i) => {
-      if (r.status === "fulfilled") {
-        const [allocPoint, , participant] = r.value;
-        map.set(String(participant).toLowerCase(), {
-          allocPoint: Number(allocPoint),
-          poolId: i,
-        });
-      }
-    });
-    return {
-      map,
-      totalAlloc: Number(totalAlloc),
-      rewardPerBlock: parseFloat(formatEther(rpb)),
-    };
-  } catch (e) {
-    console.error("[APR] buildAllocMap FAILED", (e as Error).message);
-    return null;
-  }
-}
-
 // ── Types ────────────────────────────────────────────────────────────────────
 type Miner = {
   amount: number;
@@ -176,7 +114,12 @@ type Miner = {
   stakeId: number;
   poolAddr: string;
   shares: bigint;
+  amountRaw: bigint;
+  fingerprint: string;
   poolDur: number;
+  startedAt: number;
+  gracePeriod: number | null;
+  timingKnown: boolean;
   ts: number; // fetch timestamp for the live counter
 };
 
@@ -187,21 +130,39 @@ type MinerModal =
   | null;
 
 const minerPid = (m: Miner) => `mc-${m.poolAddr.slice(2, 8)}-${m.stakeId}`;
+const DEGEN_LOGO = "https://raw.githubusercontent.com/degenstrategy/interface/main/img/degen.png";
+const displayMinerAmount = (value: number) => value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 });
+const minerDate = (timestamp: number | null) => timestamp === null || !Number.isFinite(timestamp) || !Number.isFinite(new Date(timestamp * 1000).getTime()) ? "Unavailable" : (
+  <time dateTime={new Date(timestamp * 1000).toISOString()}>
+    {new Date(timestamp * 1000).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+    <small>{new Date(timestamp * 1000).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</small>
+  </time>
+);
+
+type MinerSummary =
+  | { state: "connect" }
+  | { state: "loading" }
+  | { state: "error" }
+  | { state: "ready"; wallet: number; staked: number | null; price: number | null };
+const minerSnapshots = new Map<string, { miners: Miner[]; summary: MinerSummary; failedPools: number }>();
 
 // ── Component ────────────────────────────────────────────────────────────────
 export function MyMinersPage({ wallet }: { wallet: WalletState }) {
-  const [miners, setMiners] = useState<Miner[]>([]);
+  const cached = minerSnapshots.get(wallet.address?.toLowerCase() ?? "");
+  const [miners, setMiners] = useState<Miner[]>(cached?.miners ?? []);
   const [pendingPools, setPendingPools] = useState(0);
-  const [loaded, setLoaded] = useState(false);
+  const [failedPools, setFailedPools] = useState(cached?.failedPools ?? 0);
+  const [loaded, setLoaded] = useState(Boolean(cached));
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const [summary, setSummary] = useState<
-    | { state: "connect" }
-    | { state: "loading" }
-    | { state: "error" }
-    | { state: "ready"; wallet: number; staked: number; price: number | null }
-  >({ state: wallet.address ? "loading" : "connect" });
-  const [, setTick] = useState(0); // 1s re-render for the live miner counters
+  const [search, setSearch] = useState("");
+  const [duration, setDuration] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<MinerFilters["status"] | "grace-soon">("all");
+  const [sort, setSort] = useState<MinerFilters["sort"]>("progress-desc");
+  const clearFilters = () => { setSearch(""); setDuration("all"); setStatusFilter("all"); setSort("progress-desc"); };
+  const [summary, setSummary] = useState<MinerSummary>(cached?.summary ?? {
+    state: wallet.address ? "loading" : "connect",
+  });
 
   const [modal, setModal] = useState<MinerModal>(null);
   const [hopPool, setHopPool] = useState("");
@@ -211,12 +172,8 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
   const [modalStatus, setModalStatus] = useState("");
   const [modalBusy, setModalBusy] = useState(false);
   const loadSeq = useRef(0);
-
-  // Live counter — original startDegenFarmTicker ticked every second
-  useEffect(() => {
-    const timer = setInterval(() => setTick((t) => t + 1), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  const submitting = useRef(false);
+  const pageActive = usePageActive();
 
   // Close the actions dropdown on any document click (original behaviour)
   useEffect(() => {
@@ -230,18 +187,20 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
     if (!wallet.address) {
       setMiners([]);
       setLoaded(false);
+      setFailedPools(0);
       setSummary({ state: "connect" });
       return;
     }
     const address = wallet.address;
-    setMiners([]);
-    setLoaded(false);
+    const snapshot = minerSnapshots.get(address.toLowerCase());
+    setMiners(snapshot?.miners ?? []);
+    setLoaded(Boolean(snapshot));
     setPendingPools(DEGEN_POOL_ADDRS.length);
-    setSummary({ state: "loading" });
+    setSummary(snapshot?.summary ?? { state: "loading" });
 
     const provider = await getPublicProvider();
-    const allocMap = await buildAllocMap().catch(() => null);
     const collected: Miner[] = [];
+    const failed = new Set<string>();
 
     async function fetchPoolMiners(poolAddr: string) {
       const result: Miner[] = [];
@@ -257,32 +216,13 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
         const n = Number(count);
         if (n === 0) return result;
 
-        let poolDaily = 0;
-        let poolTotal = 0;
-        let gracePeriod = 0;
+        let gracePeriod: number | null = null;
+        let contractDuration: number | null = null;
         try {
-          const tShares = (await withTimeout(pool.totalShares(), 8000).catch(
-            () => 0n,
-          )) as bigint;
-          if (tShares > 0n)
-            poolTotal = Number(
-              formatEther(
-                (tShares * pricePerShare) / 1_000_000_000_000_000_000n,
-              ),
-            );
-          gracePeriod = Number(
-            await withTimeout(pool.gracePeriod(), 8000).catch(() => 0n),
-          );
-          const entry = allocMap?.map?.get(poolAddr.toLowerCase());
-          if (entry && allocMap && allocMap.totalAlloc > 0) {
-            poolDaily =
-              allocMap.rewardPerBlock *
-              BLOCKS_PER_DAY *
-              (entry.allocPoint / allocMap.totalAlloc);
-          }
-        } catch {
-          /* emission data is best-effort */
+          const [grace, duration] = await withTimeout(Promise.all([pool.gracePeriod(), pool.withdrawFeePeriod()]), 8000);
+          gracePeriod = Number(grace); contractDuration = Number(duration);
         }
+        catch { /* Unknown grace rules must not be displayed as a zero fee. */ }
 
         // Fetch stake info in small chunks with per-call timeouts — large
         // parallel bursts get rate-limited (same as the original)
@@ -314,27 +254,25 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
         const now = Math.floor(Date.now() / 1000);
         for (let i = 0; i < n; i++) {
           const info = infos[i];
-          if (!info) continue;
-          const amount = Number(
-            formatEther(
-              (info.shares * pricePerShare) / 1_000_000_000_000_000_000n,
-            ),
-          );
-          if (amount < 0.000001) continue;
-          const served = now - Number(info.lastMineredTime);
+          if (!info) {
+            failed.add(poolAddr);
+            const previous = snapshot?.miners.find(miner => miner.poolAddr.toLowerCase() === poolAddr.toLowerCase() && miner.stakeId === i);
+            if (previous) result.push(previous);
+            continue;
+          }
+          const amountRaw = (info.shares * pricePerShare) / 1_000_000_000_000_000_000n;
+          const amount = Number(formatEther(amountRaw));
+          if (info.shares <= 0n) continue;
+          const served = Math.max(0, now - Number(info.lastMineredTime));
           const total = Number(info.mandatoryTimeToServe);
           const pct = total > 0 ? Math.min(100, (served / total) * 100) : 100;
           const poolDur =
-            POOL_DURATIONS[poolAddr.toLowerCase()] || Number(total) || 2592000;
+            contractDuration ?? POOL_DURATIONS[poolAddr.toLowerCase()] ?? 2592000;
           const progressPct =
             poolDur > 0 ? Math.min(100, (served / poolDur) * 100) : pct;
           const withdrawReady =
-            served >= poolDur &&
-            (gracePeriod <= 0 || served <= poolDur + gracePeriod);
-          const dailyReward =
-            poolTotal > 0 && poolDaily > 0
-              ? (amount / poolTotal) * poolDaily
-              : 0;
+            contractDuration !== null && gracePeriod !== null && served >= poolDur && served <= poolDur + gracePeriod;
+          const dailyReward = 0;
           result.push({
             amount,
             pct,
@@ -347,12 +285,19 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
             stakeId: i,
             poolAddr,
             shares: info.shares,
+            amountRaw,
+            fingerprint: [info.shares, info.lastMineredTime, info.xvmcAtLastUserAction, info.lastUserActionTime, info.mandatoryTimeToServe].join(":"),
             poolDur,
+            startedAt: Number(info.lastMineredTime),
+            gracePeriod,
+            timingKnown: contractDuration !== null && gracePeriod !== null,
             ts: Date.now(),
           });
         }
       } catch (e) {
         console.warn("fetchPoolMiners", poolAddr, (e as Error).message);
+        failed.add(poolAddr);
+        return snapshot?.miners.filter(miner => miner.poolAddr.toLowerCase() === poolAddr.toLowerCase()) ?? [];
       }
       return result;
     }
@@ -365,44 +310,66 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
         try {
           const m = await fetchPoolMiners(poolAddr);
           collected.push(...m);
-        } catch {
-          /* pool failures already logged */
-        }
+        } catch { failed.add(poolAddr); }
         if (loadSeq.current !== seq) return;
-        setMiners([...collected]);
+        if (!snapshot) setMiners([...collected]);
         setPendingPools((p) => Math.max(0, p - 1));
       }
     }
     await Promise.all(Array.from({ length: 3 }, poolWorker));
     if (loadSeq.current !== seq) return;
+    setMiners([...collected]);
+    setFailedPools(failed.size);
     setLoaded(true);
 
     // Populate the summary bar
     try {
       const degenTok = new Contract(CONTRACTS.degen, ERC20_ABI, provider);
       const [walletRaw, price] = await Promise.all([
-        degenTok.balanceOf(address).catch(() => 0n),
+        degenTok.balanceOf(address),
         fetchDegenPrice(),
       ]);
       if (loadSeq.current !== seq) return;
-      setSummary({
+      const nextSummary: MinerSummary = {
         state: "ready",
         wallet: parseFloat(formatEther(walletRaw)),
-        staked: collected.reduce((s, m) => s + m.amount, 0),
+        staked: failed.size > 0
+          ? snapshot?.summary.state === "ready" ? snapshot.summary.staked : null
+          : collected.reduce((s, m) => s + m.amount, 0),
         price,
-      });
+      };
+      setSummary(nextSummary);
+      if (minerSnapshots.size >= 8) minerSnapshots.delete(minerSnapshots.keys().next().value!);
+      minerSnapshots.set(address.toLowerCase(), { miners: [...collected], summary: nextSummary, failedPools: failed.size });
     } catch (e) {
       console.warn("summary bar:", (e as Error).message);
-      if (loadSeq.current === seq) setSummary({ state: "error" });
+      if (loadSeq.current === seq && !snapshot) setSummary({ state: "error" });
     }
   }, [wallet.address]);
 
   useEffect(() => {
-    void loadStakedMiners();
-  }, [loadStakedMiners]);
+    if (!pageActive) return;
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      if (disposed) return;
+      try { if (!document.hidden) await loadStakedMiners(); }
+      catch {
+        if (!disposed) {
+          setFailedPools(DEGEN_POOL_ADDRS.length);
+          setPendingPools(0); setLoaded(true);
+          setSummary(previous => previous.state === "ready" ? previous : { state: "error" });
+        }
+      }
+      finally { if (!disposed) timer = setTimeout(() => void poll(), 60_000); }
+    };
+    void poll();
+    return () => { disposed = true; clearTimeout(timer); loadSeq.current += 1; };
+  }, [loadStakedMiners, pageActive]);
 
   // ── Modal actions (hop / withdraw / transfer) ──────────────────────────────
   function openMinerModal(kind: "hop" | "withdraw" | "transfer", miner: Miner) {
+    if (submitting.current) return;
     setOpenMenu(null);
     if (kind === "hop") {
       const eligible = HOP_POOLS.filter((p) => p.dur > miner.poolDur);
@@ -421,79 +388,63 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
   }
 
   function closeModal() {
-    setModal(null);
+    if (!submitting.current) setModal(null);
   }
 
-  function sharesFor(miner: Miner): bigint | null {
-    if (amtMode === "full") return miner.shares;
-    const custom = parseFloat(customAmt || "0");
-    if (!custom || custom <= 0 || custom > miner.amount) return null;
-    const partE = BigInt(Math.round(custom * 1e6));
-    const totE = BigInt(Math.round(miner.amount * 1e6));
-    return (miner.shares * partE) / totE;
+  function sharesFor(miner: Miner, currentShares = miner.shares, currentAmount = miner.amountRaw): bigint | null {
+    if (amtMode === "full") return currentShares;
+    try {
+      const requested = parseEther(customAmt.trim());
+      if (requested <= 0n || requested > currentAmount || currentAmount <= 0n) return null;
+      const shares = currentShares * requested / currentAmount;
+      return shares > 0n ? shares : null;
+    } catch { return null; }
   }
 
   async function execModalAction() {
-    if (!modal) return;
+    if (!modal || submitting.current) return;
     const miner = modal.miner;
+    submitting.current = true; setModalBusy(true); setModalStatus("");
     try {
-      if (modal.kind === "transfer" && !isAddress(recipient.trim())) {
-        setModalStatus("Invalid recipient address.");
-        return;
-      }
-      const shares = modal.kind === "withdraw" ? null : sharesFor(miner);
-      if (modal.kind !== "withdraw" && shares === null) {
-        setModalStatus("Invalid custom amount.");
-        return;
-      }
-      setModalBusy(true);
-      setModalStatus("Awaiting wallet confirmation…");
+      const target = recipient.trim();
+      if (modal.kind === "transfer" && (!isAddress(target) || target === ZeroAddress)) throw new Error("Enter a valid recipient address.");
+      if (!DEGEN_POOL_ADDRS.some(address => address.toLowerCase() === miner.poolAddr.toLowerCase())) throw new Error("Unsupported miner contract.");
+      if (modal.kind === "hop" && !HOP_POOLS.some(pool => pool.addr === hopPool && pool.dur > miner.poolDur)) throw new Error("Choose a longer supported pool.");
       const signer = await wallet.getSigner();
-      const pool = new Contract(miner.poolAddr, POOL_ACTION_ABI, signer);
-      let tx;
-      if (modal.kind === "hop") {
-        tx = await pool.hopStakeToAnotherPool(shares, miner.stakeId, hopPool);
-      } else if (modal.kind === "transfer") {
-        tx = await pool.transferStakeToAnotherWallet(
-          shares,
-          miner.stakeId,
-          recipient.trim(),
-        );
-      } else if (amtMode === "full") {
-        tx = await pool.withdrawAll(miner.stakeId);
-      } else {
-        const partShares = sharesFor(miner);
-        if (partShares === null) {
-          setModalStatus("Invalid custom amount.");
-          setModalBusy(false);
-          return;
-        }
-        tx = await pool.withdraw(partShares, miner.stakeId);
+      const account = await signer.getAddress();
+      const pool = new Contract(miner.poolAddr, [...POOL_ACTION_ABI, ...MASTERCHEF_ABI], signer);
+      const [count, current, price] = await Promise.all([pool.getNrOfStakes(account), pool.userInfo(account, miner.stakeId), pool.getPricePerFullShare()]);
+      const fingerprint = [current.shares, current.lastMineredTime, current.xvmcAtLastUserAction, current.lastUserActionTime, current.mandatoryTimeToServe].join(":");
+      if (BigInt(miner.stakeId) >= count || fingerprint !== miner.fingerprint) {
+        void loadStakedMiners();
+        throw new Error("This miner changed. Close this panel and select its current position.");
       }
-      setModalStatus("Transaction submitted, waiting for confirmation…");
-      await tx.wait();
-      closeModal();
-      void loadStakedMiners();
-    } catch (e) {
-      const err = e as { reason?: string; shortMessage?: string; message?: string };
-      setModalStatus(
-        "Error: " +
-          (err.reason || err.shortMessage || err.message || "Transaction failed"),
-      );
-      setModalBusy(false);
-    }
+      const amountRaw = BigInt(current.shares) * BigInt(price) / 10n ** 18n;
+      const shares = sharesFor(miner, current.shares, amountRaw);
+      if (shares === null) throw new Error("Enter an amount up to the current miner balance.");
+      let method, args: unknown[];
+      if (modal.kind === "hop") { method = pool.hopStakeToAnotherPool; args = [shares, miner.stakeId, hopPool]; }
+      else if (modal.kind === "transfer") { method = pool.transferStakeToAnotherWallet; args = [shares, miner.stakeId, target]; }
+      else if (amtMode === "full") { method = pool.withdrawAll; args = [miner.stakeId]; }
+      else { method = pool.withdraw; args = [shares, miner.stakeId]; }
+      await method.staticCall(...args);
+      await confirmTransaction(await method(...args));
+      setModal(null);
+      await loadStakedMiners().catch(() => undefined);
+    } catch (error) { setModalStatus(readableError(error)); }
+    finally { submitting.current = false; setModalBusy(false); }
   }
 
   // ── Render helpers ─────────────────────────────────────────────────────────
-  const sortedMiners = miners
-    .slice()
-    .sort((a, b) => (a.poolDur || a.total) - (b.poolDur || b.total));
-  const penalty = (m: Miner) =>
-    m.done ? "0%" : (100 - m.pct).toFixed(1) + "%";
-  const liveAmount = (m: Miner) =>
-    m.dailyReward > 0
-      ? m.amount + m.dailyReward * ((Date.now() - m.ts) / 86400000)
-      : m.amount;
+  const filteredMiners = filterMiners(miners, { search, duration, status: statusFilter === "grace-soon" ? "mature" : statusFilter, sort });
+  const sortedMiners = statusFilter === "grace-soon" ? filteredMiners.filter(graceEndingSoon) : filteredMiners;
+  const durationMiners = miners.filter(m => duration === "all" || m.poolAddr.toLowerCase() === duration.toLowerCase());
+  const countsKnown = loaded && pendingPools === 0 && failedPools === 0;
+  const statusCount = (status: string) => !countsKnown ? "—" : durationMiners.filter(m => status === "all" || (status === "grace-soon" ? graceEndingSoon(m) : minerStatus(m) === status)).length;
+  const penalty = (m: Miner) => !m.done ? "Service required" : m.withdrawReady ? "Maturity window" : "Fees may apply";
+  // Share value is a confirmed snapshot. Emission estimates cannot authorize a
+  // continuously accruing balance, especially after pool/governance changes.
+  const liveAmount = (m: Miner) => m.amount;
 
   const summaryUsd = (n: number, price: number | null) => {
     if (!price) return null;
@@ -507,12 +458,12 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
           });
   };
 
-  const summaryCol = (label: string, n: number, price: number | null) => (
+  const summaryCol = (label: string, n: number | null, price: number | null) => (
     <div className="miners-summary-col">
       <div className="miners-summary-col-label">{label}:</div>
       <div className="miners-summary-col-val">
-        {fmtFullReward(n)} DEGEN{" "}
-        {summaryUsd(n, price) && (
+        <strong>{n === null ? "—" : displayMinerAmount(n)}</strong>{n !== null && <span className="miner-summary-token"><img src={DEGEN_LOGO} alt="" />DEGEN</span>}
+        {n !== null && summaryUsd(n, price) && (
           <span className="miners-summary-usd">({summaryUsd(n, price)})</span>
         )}
       </div>
@@ -520,19 +471,20 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
   );
 
   const minersCount =
-    pendingPools > 0
-      ? `${sortedMiners.length} miner${sortedMiners.length === 1 ? "" : "s"}…`
-      : `${sortedMiners.length} miner${sortedMiners.length === 1 ? "" : "s"}`;
+    `${sortedMiners.length !== miners.length ? sortedMiners.length + " of " : ""}${miners.length} ${failedPools > 0 ? "known " : ""}miner${miners.length === 1 ? "" : "s"}${pendingPools > 0 ? "…" : ""}`;
 
   const gridBody = !wallet.address ? (
     <div className="rw-miners-loading">
       Connect your wallet to view staked miners
     </div>
-  ) : !loaded && sortedMiners.length === 0 ? (
+  ) : !loaded && miners.length === 0 ? (
     <div className="rw-miners-loading">Loading miners…</div>
+  ) : miners.length === 0 ? (
+    <div className="rw-miners-loading">{failedPools > 0 ? "Miner positions temporarily unavailable." : "No staked miners found."}</div>
   ) : sortedMiners.length === 0 ? (
-    <div className="rw-miners-loading">No staked miners found.</div>
+    <div className="miners-empty" role="status"><h2>No matching miners</h2><p>Try a different search, duration, or status.</p><button type="button" onClick={clearFilters}>Show all miners</button></div>
   ) : viewMode === "list" ? (
+    <div className="miner-table-scroll" role="region" aria-label="Miner list" tabIndex={0}>
     <table
       className="rw-miners-list"
       style={{ "--mc": "var(--red)" } as React.CSSProperties}
@@ -543,7 +495,7 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
           <th>Amount</th>
           <th>Time Served</th>
           <th>Days</th>
-          <th>Early Exit Penalty</th>
+          <th>Withdrawal Terms</th>
         </tr>
       </thead>
       <tbody>
@@ -567,7 +519,7 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
                   {m.done && (
                     <>
                       {" "}
-                      &nbsp;<span className="rw-list-ready">Ready</span>
+                      &nbsp;<span className="rw-list-ready">Service complete</span>
                     </>
                   )}
                 </div>
@@ -575,7 +527,7 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
               <td className="rw-list-days">
                 {servedDays.toLocaleString()} / {totalDays.toLocaleString()}
               </td>
-              <td className={`rw-list-penalty${m.done ? " done" : ""}`}>
+              <td className={`rw-list-penalty${m.withdrawReady ? " done" : ""}`}>
                 {penalty(m)}
               </td>
             </tr>
@@ -583,6 +535,7 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
         })}
       </tbody>
     </table>
+    </div>
   ) : (
     <div className="rw-miners-grid">
       {sortedMiners.map((m) => {
@@ -593,20 +546,20 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
         return (
           <div
             key={pid}
-            className={`mc-card${m.done ? " mc-ready" : ""}`}
+            className={`mc-card${m.withdrawReady ? " mc-ready" : ""}`}
             style={{ "--mc": "var(--red)" } as React.CSSProperties}
           >
             <div className="mc-card-toprow">
-              <span className="mc-card-dur">{dur} Lock</span>
+              <span className="mc-card-dur">{minerDurationLabel(m.poolDur || m.total)}</span>
               <span className="mc-card-num">#{m.stakeId}</span>
             </div>
-            <div className={`mc-card-amount${m.done ? " mc-ready" : ""}`}>
-              {fmtFullReward(liveAmount(m))}
+            <div className="mc-card-hero">
+              <div className={`mc-card-amount${displayMinerAmount(liveAmount(m)).length > 12 ? " mc-card-amount-long" : ""}`}>{displayMinerAmount(liveAmount(m))}</div>
+              <div className="mc-card-token-name"><img src={DEGEN_LOGO} alt="" /> DEGEN <HelpTip label="miner value">Current pool shares × price per share. This includes the position’s accrued value; it is separate from liquid DEGEN in your wallet and may be reduced by withdrawal fees.</HelpTip></div>
             </div>
-            <div className="mc-card-token-name">DEGEN</div>
             <div className="mc-card-progress">
               <div className="mc-card-prog-label">
-                <span>Progress ({dur} Miner)</span>
+                <span>Lock progress</span>
                 <span>{(m.progressPct ?? m.pct).toFixed(1)}%</span>
               </div>
               <div className="mc-card-bar-track">
@@ -624,7 +577,7 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
             </div>
             <div className="mc-card-progress">
               <div className="mc-card-prog-label">
-                <span>Mandatory Serve</span>
+                <span>Mandatory service</span>
                 <span>{m.pct.toFixed(1)}%</span>
               </div>
               <div className="mc-card-bar-track">
@@ -635,39 +588,48 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
               </div>
               <div className="mc-card-days">
                 <span>
-                  {servedDays.toLocaleString()} /{" "}
-                  {Math.floor(m.total / 86400).toLocaleString()} days
+                  {m.total === 0 ? "No minimum service" : `${servedDays.toLocaleString()} / ${Math.floor(m.total / 86400).toLocaleString()} days`}
                 </span>
-                {m.done && <span className="mc-ready-pill">Ready</span>}
+                {m.done && <span className="mc-ready-pill">Service complete</span>}
               </div>
             </div>
-            <div className="mc-card-footer">
-              <span className="mc-penalty-label">Early Exit Penalty</span>
-              <span className={`mc-penalty-val${m.done ? " done" : ""}`}>
-                {penalty(m)}
-              </span>
-            </div>
-            <div className="mc-actions-wrap">
+            <dl className="miner-dates">
+              <div><dt>{m.served >= m.poolDur ? "Matured" : "Matures"}</dt><dd>{minerDate(m.timingKnown ? m.startedAt + m.poolDur : null)}</dd></div>
+              <div><dt>{minerStatus(m) === "overdue" ? "Grace ended" : "Grace ends"}</dt><dd>{minerDate(m.timingKnown && m.gracePeriod !== null ? m.startedAt + m.poolDur + m.gracePeriod : null)}</dd></div>
+            </dl>
+            <div className="mc-actions-wrap" onKeyDown={event => {
+              if (event.key === "Escape") {
+                setOpenMenu(null);
+                event.currentTarget.querySelector<HTMLButtonElement>(".mc-actions-btn")?.focus();
+              }
+            }}>
               <button
+                type="button"
                 className="mc-actions-btn"
+                aria-expanded={openMenu === pid}
+                aria-controls={`${pid}-actions`}
                 onClick={(event) => {
                   event.stopPropagation();
                   setOpenMenu(openMenu === pid ? null : pid);
                 }}
               >
-                Actions ▼
+                <span>Actions</span><span aria-hidden="true">{openMenu === pid ? "−" : "+"}</span>
               </button>
               <div
-                className={`mc-actions-menu${openMenu === pid ? "" : " hidden"}`}
+                id={`${pid}-actions`}
+                className="mc-actions-menu"
+                role="group"
+                aria-label={`Actions for ${dur} miner #${m.stakeId}`}
+                hidden={openMenu !== pid}
               >
-                <button onClick={() => openMinerModal("hop", m)}>
-                  Upgrade Miner
+                <button type="button" aria-label="Upgrade Miner" onClick={() => openMinerModal("hop", m)}>
+                  <strong>Upgrade miner</strong><span>Move to a longer lock duration</span>
                 </button>
-                <button onClick={() => openMinerModal("transfer", m)}>
-                  Transfer Miner To Another Wallet
+                <button type="button" aria-label="Transfer Miner To Another Wallet" onClick={() => openMinerModal("transfer", m)}>
+                  <strong>Transfer miner</strong><span>Send this position to another wallet</span>
                 </button>
-                <button onClick={() => openMinerModal("withdraw", m)}>
-                  End Miner (Withdraw)
+                <button type="button" aria-label="End Miner (Withdraw)" onClick={() => openMinerModal("withdraw", m)}>
+                  <strong>Withdraw</strong><span>End all or part of this miner</span>
                 </button>
               </div>
             </div>
@@ -765,7 +727,7 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
   );
 
   return (
-    <main className="legacy-main">
+    <main className="legacy-main degen-miner-portfolio">
       <div className="miners-summary" id="minersSummary">
         {summary.state === "connect" ? (
           <div className="miners-summary-loading">
@@ -781,10 +743,10 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
         ) : (
           <div className="miners-summary-row">
             {summaryCol("Wallet Balance", summary.wallet, summary.price)}
-            {summaryCol("Total Miners", summary.staked, summary.price)}
+            {summaryCol("Miner value", summary.staked, summary.price)}
             {summaryCol(
-              "Total Balance",
-              summary.wallet + summary.staked,
+              "Wallet + miner value",
+              summary.staked === null ? null : summary.wallet + summary.staked,
               summary.price,
             )}
           </div>
@@ -793,51 +755,54 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
       <div className="rw-miners-section">
         <div className="rw-miners-header">
           <div>
-            <span className="rw-miners-title">
-              Miners <span className="farms-count">{wallet.address ? minersCount : ""}</span>
-            </span>
+            <h1 className="rw-miners-title">Miners <small className="farms-count" aria-live="polite">{wallet.address ? minersCount : ""}</small></h1>
             <span className="rw-miners-sub">
-              Time-locked positions from auto-harvest — sorted by % progress
+              Time-locked DEGEN positions
             </span>
           </div>
           <div className="rw-view-toggle">
             <button
               className={`rw-view-btn${viewMode === "grid" ? " active" : ""}`}
-              title="Grid view"
+              aria-label="Grid view"
+              aria-pressed={viewMode === "grid"}
               onClick={() => setViewMode("grid")}
             >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-                <rect x="0" y="0" width="6" height="6" rx="1" />
-                <rect x="8" y="0" width="6" height="6" rx="1" />
-                <rect x="0" y="8" width="6" height="6" rx="1" />
-                <rect x="8" y="8" width="6" height="6" rx="1" />
-              </svg>
+              Grid
             </button>
             <button
               className={`rw-view-btn${viewMode === "list" ? " active" : ""}`}
-              title="List view"
+              aria-label="List view"
+              aria-pressed={viewMode === "list"}
               onClick={() => setViewMode("list")}
             >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-                <rect x="0" y="1" width="14" height="2" rx="1" />
-                <rect x="0" y="6" width="14" height="2" rx="1" />
-                <rect x="0" y="11" width="14" height="2" rx="1" />
-              </svg>
+              List
             </button>
           </div>
         </div>
-        <div className="miner-token-tabs miner-token-tabs-hidden">
-          <button className="miner-token-tab active" data-token="degen">
-            DEGEN
-          </button>
+        <div className="miners-toolbar" role="search" aria-label="Find miners">
+          <label>Search miners<input type="search" placeholder="Duration, miner # or contract address" value={search} onChange={event => setSearch(event.target.value)} /></label>
+          <label>Duration<select value={duration} onChange={event => setDuration(event.target.value)}>
+            <option value="all">All durations ({loaded ? miners.length : "—"})</option>
+            {HOP_POOLS.map(pool => <option key={pool.addr} value={pool.addr}>{minerDurationLabel(pool.dur)} ({loaded ? miners.filter(m => m.poolAddr.toLowerCase() === pool.addr.toLowerCase()).length : "—"})</option>)}
+          </select></label>
+          <label>Status<select value={statusFilter} onChange={event => setStatusFilter(event.target.value as typeof statusFilter)}>
+            {([ ["all", "All statuses"], ["locked", "Not yet mature"], ["mature", "Mature"], ["grace-soon", "Grace ending in 48h"], ["overdue", "Overdue"], ["unknown", "Timing unavailable"] ] as const).map(([value, label]) => <option key={value} value={value}>{label} ({statusCount(value)})</option>)}
+          </select></label>
+          <label>Sort by<select value={sort} onChange={event => setSort(event.target.value as MinerFilters["sort"])}>
+            <option value="progress-desc">Lock progress</option><option value="value-desc">Highest value</option><option value="duration-asc">Shortest duration</option><option value="duration-desc">Longest duration</option>
+          </select></label>
+          <button type="button" onClick={clearFilters}>Clear filters</button>
         </div>
-        <div id="rwMinersGrid">{gridBody}</div>
+        <div className="miner-deadline-shortcuts" role="group" aria-label="Miner maturity filters">
+          {([ ["mature", "Mature"], ["grace-soon", "Grace ending in 48h"], ["overdue", "Overdue"] ] as const).map(([value, label]) => <button key={value} type="button" disabled={!countsKnown} aria-pressed={statusFilter === value} onClick={() => { setSearch(""); setStatusFilter(statusFilter === value ? "all" : value); }}>{label}{" "}<strong>{statusCount(value)}</strong></button>)}
+        </div>
+        <div id="rwMinersGrid" role="region" aria-label="Owned miners">{gridBody}</div>
       </div>
 
       {/* ── Hop Miner Modal ── */}
       {modal?.kind === "hop" && (
-        <div className="modal-overlay">
-          <div className="modal-box" style={modalBoxStyle}>
+        <div className="modal-overlay miner-action-overlay">
+          <div className="modal-box" style={modalBoxStyle} role="dialog" aria-modal="false" aria-label="Upgrade miner">
             <div
               style={{
                 ...modalIconStyle("#4fc3f7"),
@@ -884,7 +849,7 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
                 </option>
               ))}
             </select>
-            <div style={modalHeadStyle}>Amount to transfer</div>
+            <div style={modalHeadStyle}>Amount of miner value</div>
             {amtOptions(modal.miner, "Transfer")}
             {customAmtInput}
             <div className="modal-btn-row" style={{ marginTop: 22 }}>
@@ -911,8 +876,8 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
 
       {/* ── End Miner (Withdraw) Modal ── */}
       {modal?.kind === "withdraw" && (
-        <div className="modal-overlay">
-          <div className="modal-box" style={modalBoxStyle}>
+        <div className="modal-overlay miner-action-overlay">
+          <div className="modal-box" style={modalBoxStyle} role="dialog" aria-modal="false" aria-label="Withdraw miner">
             <div style={{ ...modalIconStyle("var(--red)"), fontWeight: 900 }}>
               !
             </div>
@@ -939,16 +904,11 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
                 "Your miner has matured and can be withdrawn. Please choose your withdrawal option."
               ) : (
                 <>
-                  💀💀💀<strong>WARNING:</strong> 💀💀💀
-                  <br />
-                  The miner either hasn&apos;t matured or is already past grace
-                  period. You are attempting to perform an emergency
-                  withdrawal. Withdraw penalties will Apply. You have been
-                  warned.
+                  Outside the maturity window, the contract deducts an early or late withdrawal fee. Mandatory service may prevent withdrawal. Current eligibility is checked before your wallet opens.
                 </>
               )}
             </p>
-            <div style={modalHeadStyle}>Amount to transfer</div>
+            <div style={modalHeadStyle}>Amount of miner value</div>
             {amtOptions(modal.miner, "Withdraw")}
             {customAmtInput}
             <div className="modal-btn-row" style={{ marginTop: 22 }}>
@@ -975,8 +935,8 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
 
       {/* ── Transfer Miner Modal ── */}
       {modal?.kind === "transfer" && (
-        <div className="modal-overlay">
-          <div className="modal-box" style={modalBoxStyle}>
+        <div className="modal-overlay miner-action-overlay">
+          <div className="modal-box" style={modalBoxStyle} role="dialog" aria-modal="false" aria-label="Transfer miner">
             <div style={{ ...modalIconStyle("#f5a623"), fontWeight: 900 }}>
               !
             </div>
@@ -999,12 +959,7 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
                 textAlign: "center",
               }}
             >
-              💀💀💀 WARNING: 💀💀💀
-              <br />
-              <br />
-              You will transfer your miner to another wallet. Please make sure
-              you are transferring to the wallet you own and control (else
-              somebody might be attempting to steal your tokens!)
+              The selected miner shares and their lock rules transfer to the recipient. Check the address carefully.
             </p>
             <div style={modalHeadStyle}>Recipient Address:</div>
             <input
@@ -1014,7 +969,7 @@ export function MyMinersPage({ wallet }: { wallet: WalletState }) {
               value={recipient}
               onChange={(event) => setRecipient(event.target.value)}
             />
-            <div style={modalHeadStyle}>Amount to transfer</div>
+            <div style={modalHeadStyle}>Amount of miner value</div>
             {amtOptions(modal.miner, "Transfer")}
             {customAmtInput}
             <div className="modal-btn-row" style={{ marginTop: 22 }}>

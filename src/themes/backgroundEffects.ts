@@ -3,6 +3,7 @@ import { THEMES, type ThemeName } from "./themes";
 export const BACKGROUND_PATTERNS = [
   "none",
   "dots",
+  "starlight",
   "synapse",
   "rain",
   "constellations",
@@ -25,6 +26,7 @@ export type BackgroundSettings = {
 const PATTERN_DEFAULTS: Partial<
   Record<ThemeName, Partial<BackgroundSettings>>
 > = {
+  oink: { pattern: "sparkles", effectColor: "#ff8cb8", intensity: 0.6 },
   light: { pattern: "dots" },
   midnight: { pattern: "rain", effectColor: "#ffffff", intensity: 0.5 },
   paper: { pattern: "dots" },
@@ -37,6 +39,7 @@ const PATTERN_DEFAULTS: Partial<
   ume: { pattern: "petals", effectColor: "#f5a0c0" },
   lavender: { frosted: true },
   cute: { pattern: "sparkles", effectColor: "#ff8cb8" },
+  obsidian: { pattern: "starlight", effectColor: "#f4f4f5", intensity: 0.6 },
 };
 
 const PATTERN_CLASSES = BACKGROUND_PATTERNS.filter(
@@ -65,47 +68,47 @@ export function backgroundDefaults(theme: ThemeName): BackgroundSettings {
 }
 
 export function readBackground(theme: ThemeName): BackgroundSettings {
+  const defaults = backgroundDefaults(theme);
   try {
     const saved = JSON.parse(
       localStorage.getItem("degen-react-background") || "null",
-    ) as
-      | (Partial<BackgroundSettings> & {
-          animation?: string;
-        })
-      | null;
-    if (!saved) return backgroundDefaults(theme);
+    ) as unknown;
+    if (!saved) return defaults;
+    if (typeof saved !== "object" || Array.isArray(saved)) throw new Error("Invalid background settings");
+    const values = saved as Record<string, unknown>;
 
-    const legacyPattern = saved.pattern ?? saved.animation;
+    const legacyPattern = values.pattern ?? values.animation;
     const pattern = BACKGROUND_PATTERNS.includes(
       legacyPattern as BackgroundPattern,
     )
       ? (legacyPattern as BackgroundPattern)
       : legacyPattern === "flow"
         ? "perlin-flow"
-        : backgroundDefaults(theme).pattern;
+        : defaults.pattern;
     const intensity =
-      typeof saved.intensity === "number"
-        ? saved.intensity > 1
-          ? saved.intensity / 100
-          : saved.intensity
-        : 1;
+      typeof values.intensity === "number" && Number.isFinite(values.intensity)
+        ? values.intensity > 1
+          ? values.intensity / 100
+          : values.intensity
+        : defaults.intensity;
     const size =
-      typeof saved.size === "number"
-        ? saved.size > 3
-          ? saved.size / 100
-          : saved.size
-        : 1;
+      typeof values.size === "number" && Number.isFinite(values.size)
+        ? values.size > 3
+          ? values.size / 100
+          : values.size
+        : defaults.size;
 
     return {
-      ...backgroundDefaults(theme),
-      ...saved,
       pattern,
+      effectColor: typeof values.effectColor === "string" && /^(#[0-9a-f]{6})?$/i.test(values.effectColor)
+        ? values.effectColor : defaults.effectColor,
       intensity: Math.max(0, Math.min(1, intensity)),
       size: Math.max(0.2, Math.min(3, size)),
+      frosted: typeof values.frosted === "boolean" ? values.frosted : defaults.frosted,
     };
   } catch {
-    localStorage.removeItem("degen-react-background");
-    return backgroundDefaults(theme);
+    try { localStorage.removeItem("degen-react-background"); } catch { /* Use defaults without storage. */ }
+    return defaults;
   }
 }
 
@@ -125,14 +128,28 @@ export function applyBackground(
   );
   document.body.classList.toggle("theme-frosted", settings.frosted);
   applyPattern(settings.pattern);
-  if (persist)
-    localStorage.setItem(
+  if (persist) {
+    try { localStorage.setItem(
       "degen-react-background",
       JSON.stringify(settings),
-    );
+    ); } catch { /* Background controls still work when storage is unavailable. */ }
+  }
+}
+
+let activePattern: BackgroundPattern = "none";
+const motionPreference = typeof window !== "undefined" ? window.matchMedia?.("(prefers-reduced-motion: reduce)") : undefined;
+motionPreference?.addEventListener?.("change", () => applyPattern(activePattern));
+
+function scheduleDraw(draw: FrameRequestCallback) {
+  if (!document.hidden) { requestAnimationFrame(draw); return; }
+  const resume = () => {
+    if (!document.hidden) { document.removeEventListener("visibilitychange", resume); requestAnimationFrame(draw); }
+  };
+  document.addEventListener("visibilitychange", resume);
 }
 
 function applyPattern(pattern: BackgroundPattern) {
+  activePattern = pattern;
   delete document.body.dataset.effect;
   delete document.body.dataset.frosted;
   document.body.classList.remove(...PATTERN_CLASSES);
@@ -141,7 +158,7 @@ function applyPattern(pattern: BackgroundPattern) {
     .forEach((canvas) => canvas.remove());
   if (pattern !== "none")
     document.body.classList.add(`bg-pattern-${pattern}`);
-  EFFECT_STARTERS[pattern]?.();
+  if (!motionPreference?.matches) EFFECT_STARTERS[pattern]?.();
 }
 
 function effectColor(fallback = "#9cdef2") {
@@ -165,6 +182,7 @@ function effectSize() {
 function createEffectCanvas(id: string) {
   const canvas = document.createElement("canvas");
   canvas.id = id;
+  canvas.setAttribute("aria-hidden", "true");
   canvas.style.cssText =
     "position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;";
   document.body.prepend(canvas);
@@ -217,12 +235,13 @@ function startSynapse() {
   };
 
   const draw = () => {
-    if (!document.body.classList.contains("bg-pattern-synapse")) {
+    if (!canvas.isConnected || !document.body.classList.contains("bg-pattern-synapse")) {
       window.removeEventListener("resize", resize);
       canvas.remove();
       return;
     }
-    requestAnimationFrame(draw);
+    scheduleDraw(draw);
+    if (document.hidden) return;
     context.clearRect(0, 0, width, height);
     const color = effectColor();
     if (particles.length < maxParticles && Math.random() < 0.12)
@@ -302,12 +321,13 @@ function startRain() {
   };
 
   const draw = () => {
-    if (!document.body.classList.contains("bg-pattern-rain")) {
+    if (!canvas.isConnected || !document.body.classList.contains("bg-pattern-rain")) {
       window.removeEventListener("resize", resize);
       canvas.remove();
       return;
     }
-    requestAnimationFrame(draw);
+    scheduleDraw(draw);
+    if (document.hidden) return;
     context.clearRect(0, 0, width, height);
     const color = effectColor();
     const rawIntensity = Number.parseFloat(
@@ -395,12 +415,13 @@ function startConstellations() {
 
   let time = 0;
   const draw = () => {
-    if (!document.body.classList.contains("bg-pattern-constellations")) {
+    if (!canvas.isConnected || !document.body.classList.contains("bg-pattern-constellations")) {
       window.removeEventListener("resize", handleResize);
       canvas.remove();
       return;
     }
-    requestAnimationFrame(draw);
+    scheduleDraw(draw);
+    if (document.hidden) return;
     time += 0.01;
     context.clearRect(0, 0, width, height);
     const color = effectColor();
@@ -508,12 +529,13 @@ function startPerlinFlow() {
   };
 
   const draw = () => {
-    if (!document.body.classList.contains("bg-pattern-perlin-flow")) {
+    if (!canvas.isConnected || !document.body.classList.contains("bg-pattern-perlin-flow")) {
       window.removeEventListener("resize", resize);
       canvas.remove();
       return;
     }
-    requestAnimationFrame(draw);
+    scheduleDraw(draw);
+    if (document.hidden) return;
     context.fillStyle = getFadeColor();
     context.fillRect(0, 0, width, height);
     const color = effectColor();
@@ -600,12 +622,13 @@ function startPetals() {
   window.addEventListener("resize", resize);
 
   const draw = () => {
-    if (!document.body.classList.contains("bg-pattern-petals")) {
+    if (!canvas.isConnected || !document.body.classList.contains("bg-pattern-petals")) {
       window.removeEventListener("resize", resize);
       canvas.remove();
       return;
     }
-    requestAnimationFrame(draw);
+    scheduleDraw(draw);
+    if (document.hidden) return;
     context.clearRect(0, 0, width, height);
     const color = effectColor();
     const size = effectSize();
@@ -708,12 +731,13 @@ function startSparkles() {
     context.restore();
   };
   const draw = () => {
-    if (!document.body.classList.contains("bg-pattern-sparkles")) {
+    if (!canvas.isConnected || !document.body.classList.contains("bg-pattern-sparkles")) {
       window.removeEventListener("resize", resize);
       canvas.remove();
       return;
     }
-    requestAnimationFrame(draw);
+    scheduleDraw(draw);
+    if (document.hidden) return;
     context.clearRect(0, 0, width, height);
     const color = effectColor();
     const size = effectSize();
@@ -790,12 +814,13 @@ function startEmbers() {
   };
 
   const draw = () => {
-    if (!document.body.classList.contains("bg-pattern-embers")) {
+    if (!canvas.isConnected || !document.body.classList.contains("bg-pattern-embers")) {
       window.removeEventListener("resize", resize);
       canvas.remove();
       return;
     }
-    requestAnimationFrame(draw);
+    scheduleDraw(draw);
+    if (document.hidden) return;
     context.globalCompositeOperation = "destination-out";
     context.fillStyle = "rgba(0,0,0,0.18)";
     context.fillRect(0, 0, width, height);

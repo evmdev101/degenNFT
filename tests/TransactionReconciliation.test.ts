@@ -1,0 +1,31 @@
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+const mocks = vi.hoisted(() => ({ receipt: vi.fn(), count: vi.fn() }));
+vi.mock("../src/lib/chain", () => ({ getPublicProvider: async () => ({ getTransactionReceipt: mocks.receipt, getTransactionCount: mocks.count }) }));
+beforeEach(() => { vi.resetModules(); vi.useFakeTimers(); sessionStorage.clear(); mocks.receipt.mockReset().mockResolvedValue(null); mocks.count.mockReset().mockResolvedValue(0); });
+afterEach(() => { vi.useRealTimers(); sessionStorage.clear(); });
+it("reconciles a late confirmed receipt without resubmitting or locking an action", async () => {
+  const { startTransactionReconciliation, confirmTransaction } = await import("../src/lib/transactions");
+  const confirmed = vi.fn(); window.addEventListener("degen:transaction-confirmed", confirmed);
+  const stop = startTransactionReconciliation();
+  const wait = vi.fn().mockRejectedValue({ code: "TIMEOUT" });
+  await expect(confirmTransaction({ hash: "0x" + "a".repeat(64), from: "0x" + "1".repeat(40), nonce: 0, wait })).rejects.toThrow("taking longer");
+  mocks.receipt.mockResolvedValue({ status: 1 });
+  await vi.advanceTimersByTimeAsync(20_000);
+  expect(confirmed).toHaveBeenCalledTimes(1);
+  expect(wait).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(sessionStorage.getItem("degen:submitted-transactions")!)).toEqual([]);
+  stop(); window.removeEventListener("degen:transaction-confirmed", confirmed);
+});
+it("restores a valid submitted hash and reconciles a consumed nonce as replaced, without claiming success", async () => {
+  sessionStorage.setItem("degen:submitted-transactions", JSON.stringify([{ hash: "0x" + "b".repeat(64), from: "0x" + "2".repeat(40), nonce: 4, started: Date.now() }]));
+  mocks.count.mockResolvedValue(5);
+  const settled = vi.fn(), confirmed = vi.fn();
+  window.addEventListener("degen:transaction-settled", settled); window.addEventListener("degen:transaction-confirmed", confirmed);
+  const { startTransactionReconciliation } = await import("../src/lib/transactions");
+  const stop = startTransactionReconciliation();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(settled).toHaveBeenCalledTimes(1);
+  expect(settled.mock.calls[0][0].detail.state).toBe("replaced");
+  expect(confirmed).not.toHaveBeenCalled();
+  stop(); window.removeEventListener("degen:transaction-settled", settled); window.removeEventListener("degen:transaction-confirmed", confirmed);
+});

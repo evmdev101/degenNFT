@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { LoadingScreen } from "./LoadingScreen";
+import { recoverStalePage } from "../lib/stalePageRecovery";
 
 type Props = { children: ReactNode };
 type State = { error: Error | null; retryCount: number };
@@ -14,6 +14,7 @@ export class AppErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("DEGEN application error", error, info);
+    if (recoverStalePage(error)) return;
     if (this.state.retryCount > 0 || this.retryTimer !== null) return;
     this.retryTimer = window.setTimeout(() => {
       this.retryTimer = null;
@@ -30,6 +31,6 @@ export class AppErrorBoundary extends Component<Props, State> {
 
   render() {
     if (!this.state.error) return this.props.children;
-    return <LoadingScreen fullscreen />;
+    return <main role="status" className="route-skeleton">This page is temporarily unavailable. Please try another tab.</main>;
   }
 }

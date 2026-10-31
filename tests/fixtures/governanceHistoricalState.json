@@ -1,0 +1,82 @@
+[
+  {
+    "contract": "Farms",
+    "method": "poolAllocationPercentage",
+    "args": [
+      4
+    ],
+    "block": 27762406,
+    "result": [
+      "0"
+    ]
+  },
+  {
+    "contract": "MasterChef",
+    "method": "existingParticipant",
+    "args": [
+      "0x7B2DcC0D0180D6863e4D6Fa14903459638c5b45B"
+    ],
+    "block": 24912037,
+    "result": [
+      true
+    ]
+  },
+  {
+    "contract": "Governor",
+    "method": "getRollBonus",
+    "args": [
+      "0xd9b491ac0f5487673500b67224b67b4171a08aca"
+    ],
+    "block": 24860480,
+    "result": [
+      "50"
+    ]
+  },
+  {
+    "contract": "MasterChef",
+    "method": "DTXPerBlock",
+    "args": [],
+    "block": 24495369,
+    "result": [
+      "2500000000000000000000000"
+    ]
+  },
+  {
+    "contract": "Treasury",
+    "method": "treasuryProposal",
+    "args": [
+      "11"
+    ],
+    "block": 25795807,
+    "result": [
+      false,
+      "1771057665",
+      "100000000000000000000",
+      "0",
+      "0",
+      "0x3E79130ab714E97ee73f86a56a2427bb1A519896",
+      "0xAAcA9cFc6Fe88Dc16e87ff8315C554220Bf13264",
+      "40000000000000000000000000000",
+      "23"
+    ]
+  },
+  {
+    "contract": "Treasury",
+    "method": "treasuryProposal",
+    "args": [
+      "13"
+    ],
+    "block": 26568368,
+    "result": [
+      false,
+      "1779069855",
+      "1000000000000000000000",
+      "0",
+      "0",
+      "0x3E79130ab714E97ee73f86a56a2427bb1A519896",
+      "0xAAcA9cFc6Fe88Dc16e87ff8315C554220Bf13264",
+      "50000000000000000000000000000",
+      "27"
+    ]
+  }
+]

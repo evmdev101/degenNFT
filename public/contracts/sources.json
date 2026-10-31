@@ -1,0 +1,29 @@
+{
+  "chainId": 369,
+  "files": [
+    {
+      "filename": "DEGEN-explorer.sol",
+      "contractName": "DEGEN",
+      "address": "0x3E79130ab714E97ee73f86a56a2427bb1A519896",
+      "sourceUrl": "https://api.scan.pulsechain.com/api?module=contract&action=getsourcecode&address=0x3E79130ab714E97ee73f86a56a2427bb1A519896",
+      "compiler": "v0.8.20+commit.a1b79de6",
+      "sha256": "403ead6bad68a08477a028b9a92e59cb0f580738eb6fa05af5aa186b5fc02a9e"
+    },
+    {
+      "filename": "DEGEN-token.sol",
+      "contractName": "DEGEN",
+      "address": "0x3E79130ab714E97ee73f86a56a2427bb1A519896",
+      "sourceUrl": "https://api.scan.pulsechain.com/api?module=contract&action=getsourcecode&address=0x3E79130ab714E97ee73f86a56a2427bb1A519896",
+      "excerptOf": "DEGEN-explorer.sol",
+      "sha256": "35831bb5061e6bf1c33179f168c13892be93e90a5283fc17528cb81d8286e669"
+    },
+    {
+      "filename": "DTXgovernor-explorer.sol",
+      "contractName": "DTXgovernor",
+      "address": "0x456d747622d30C4db69D40973ecf0D29EE007B57",
+      "sourceUrl": "https://api.scan.pulsechain.com/api?module=contract&action=getsourcecode&address=0x456d747622d30C4db69D40973ecf0D29EE007B57",
+      "compiler": "v0.8.20+commit.a1b79de6",
+      "sha256": "0901890578ccb24169cd806b98b65cb1c46203e48bff845c367be15237e02028"
+    }
+  ]
+}

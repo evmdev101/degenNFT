@@ -98,20 +98,71 @@ h4,
   letter-spacing: -0.02em;
 }
 
+/* Keep the reference's dark tabs readable on the four light palettes too. */
+:root:is([data-theme="light"], [data-theme="paper"], [data-theme="lavender"], [data-theme="cute"]) {
+  --header-nav-muted: color-mix(in srgb, var(--fg) 75%, var(--bg));
+  --header-nav-highlight: var(--fg);
+  --header-nav-hover: var(--fg);
+  --header-nav-hover-bg: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+
 .site-header {
-  min-height: 80px;
-  padding: 12px 32px;
-  gap: 16px;
+  display: block;
+  min-height: 72px;
+  padding: 0;
   background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--bg) 82%, transparent),
-    color-mix(in srgb, var(--panel) 60%, transparent),
-    color-mix(in srgb, var(--bg) 82%, transparent)
+    100deg,
+    var(--bg),
+    color-mix(in srgb, var(--accent) 12%, var(--panel)) 52%,
+    var(--bg)
   );
-  border-bottom: 1px solid
-    color-mix(in srgb, var(--accent) 34%, transparent);
-  backdrop-filter: blur(18px) saturate(125%);
-  box-shadow: 0 10px 40px #00000059;
+  border-bottom: 0;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+/* OINK keeps Obsidian's navbar neutral instead of tinting the whole bar. */
+[data-theme="obsidian"] .site-header:has(.site-header-inner) {
+  background: color-mix(in srgb, var(--bg) 96%, transparent);
+  border-bottom-color: var(--border);
+  box-shadow: 0 8px 28px #0003;
+}
+
+.site-header-inner {
+  width: min(1480px, calc(100% - 48px));
+  max-width: 1480px;
+  min-height: 72px;
+  margin-inline: auto;
+  padding-block: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+
+.site-header .header-brand {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 10px;
+  color: #e06c75;
+  text-decoration: none;
+}
+
+.site-header .header-brand img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+}
+
+.site-header .header-brand strong {
+  font: 900 24px / 1 "DM Sans", sans-serif;
+  letter-spacing: 0;
+}
+
+.site-header .header-brand:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
 }
 
 .social-links {
@@ -187,21 +238,21 @@ h4,
   letter-spacing: 0.14em;
 }
 
-.site-header nav {
-  gap: 7px;
+.site-header .primary-nav {
+  gap: 3px;
+  flex-wrap: wrap;
 }
 
-.site-header nav button,
-.site-header nav a {
-  min-height: 40px;
-  padding: 9px 13px;
-  border: 1px solid color-mix(in srgb, var(--fg) 12%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--fg) 4.5%, transparent);
-  color: color-mix(in srgb, var(--fg) 72%, transparent);
-  font: 800 0.69rem "Fira Code", ui-monospace, monospace;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+.site-header .primary-nav > a {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--header-nav-muted, #96959f);
+  font: 700 15px / 20px "DM Sans", sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
   transition:
     transform 0.15s ease,
     border-color 0.15s ease,
@@ -209,28 +260,65 @@ h4,
     color 0.15s ease;
 }
 
-.site-header nav button:hover,
-.site-header nav a:hover {
-  border-color: color-mix(in srgb, var(--fg) 32%, transparent);
-  background: color-mix(in srgb, var(--fg) 8%, transparent);
+.site-header .primary-nav > a:hover {
+  background: var(--header-nav-hover-bg, #ffffff08);
+  color: var(--header-nav-hover, #f2f2f4);
+  transform: none;
+}
+
+.site-header .primary-nav > a.active {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  color: var(--header-nav-highlight, #fff);
+  box-shadow: none;
+}
+
+.site-header .header-actions {
+  justify-self: end;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  max-width: 100%;
+  gap: 12px;
+}
+
+.site-header .header-actions > button {
+  min-height: 44px;
+  height: 44px;
+  padding: 10px 20px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel);
   color: var(--fg);
-  transform: translateY(-1px);
+  font: 700 13px / 1.4 "DM Sans", sans-serif;
+  line-height: 1.4;
+  text-transform: none;
 }
 
-.site-header nav button.active,
-.site-header nav a.active {
-  border-color: #ffffff2e;
-  background: linear-gradient(
-    135deg,
-    var(--accent),
-    color-mix(in srgb, var(--accent) 58%, var(--panel))
-  );
-  color: #fff;
-  box-shadow: 0 0 24px color-mix(in srgb, var(--accent) 32%, transparent);
+.site-header .pill-button {
+  min-width: 86px;
+  font: 500 0.8125rem / 1.4 "DM Sans", sans-serif;
 }
 
-.header-actions {
-  gap: 10px;
+.site-header .wallet-button {
+  box-shadow: none;
+  min-width: 148px;
+}
+
+.site-header .wallet-button.warning {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 28%, var(--panel));
+  color: var(--fg);
+}
+
+.site-header .nav-icon:focus-visible,
+.site-header .header-actions > button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.site-header .wallet-button:disabled {
+  opacity: 0.65;
+  cursor: wait;
 }
 
 .pill-button,
@@ -618,7 +706,6 @@ h4,
   background: var(--panel);
 }
 
-body.theme-frosted .site-header,
 body.theme-frosted .theme-window,
 body.theme-frosted .theme-pro-tip,
 body.theme-frosted .metric-card,
@@ -644,24 +731,60 @@ body.theme-frosted .dsale-modal-box {
   border-color: color-mix(in srgb, var(--fg) 22%, transparent);
 }
 
+@supports (backdrop-filter: blur(1px)) {
+  body.theme-frosted .site-header {
+    background: linear-gradient(
+      100deg,
+      color-mix(in srgb, var(--bg) 55%, transparent),
+      color-mix(in srgb, var(--accent) 12%, transparent) 52%,
+      color-mix(in srgb, var(--bg) 55%, transparent)
+    );
+    backdrop-filter: blur(10px) saturate(130%);
+  }
+}
+
 @media (max-width: 1100px) {
-  .site-header {
+  .site-header-inner {
+    display: flex;
     flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 12px 20px;
   }
 
-  .site-header nav {
+  .site-header .primary-nav {
     order: 3;
     flex: 1 0 100%;
-    justify-content: flex-start;
-    overflow-x: auto;
-    padding-bottom: 2px;
+    justify-content: center;
+    overflow: visible;
+    padding: 0;
   }
 }
 
 @media (max-width: 650px) {
   .site-header {
     min-height: 68px;
-    padding: 10px 12px;
+    padding: 0;
+  }
+
+  .site-header-inner {
+    width: calc(100% - 24px);
+    min-height: 68px;
+    padding-block: 12px;
+    gap: 12px 8px;
+  }
+
+  .site-header .header-actions {
+    margin-left: auto;
+    gap: 8px;
+  }
+
+  .site-header .header-actions > button {
+    padding-inline: 12px;
+  }
+
+  .site-header .pill-button,
+  .site-header .wallet-button {
+    min-width: 0;
   }
 
   .social-links a {
@@ -678,11 +801,12 @@ body.theme-frosted .dsale-modal-box {
     height: 36px;
   }
 
-  .site-header nav button,
-  .site-header nav a {
-    min-height: 36px;
-    padding: 8px 11px;
-    font-size: 0.61rem;
+  .site-header .primary-nav {
+    gap: 4px;
+  }
+
+  .site-header .primary-nav > a {
+    padding-inline: 10px;
   }
 
   .nft-page {

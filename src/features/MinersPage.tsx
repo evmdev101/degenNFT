@@ -1,12 +1,15 @@
+import { usePageActive } from "../hooks/usePageActive";
+import { confirmTransaction } from "../lib/transactions";
 // Miners tab (Deploy Miner) — markup and styling restored verbatim from the
 // original single-file site (commit 825e9f2). Logic mirrors
 // loadDeployMinerTab / renderDeployGrid / deployMiner from the original.
-import { Contract, MaxUint256, formatEther, isAddress, parseEther } from "ethers";
+import { Contract, ZeroAddress, formatEther, isAddress, parseEther } from "ethers";
 import type { CSSProperties } from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CONTRACTS, ERC20_ABI, POOL_DEPOSIT_ABI } from "../config/contracts";
 import type { WalletState } from "../hooks/useWallet";
-import { getPublicProvider } from "../lib/chain";
+import { getPublicProvider, readableError } from "../lib/chain";
+import "./miner-forms.css";
 
 const DEGEN_POOLS = [
   { label: "1 Month", addr: "0xD9B491ac0f5487673500B67224b67b4171a08aCa" },
@@ -14,13 +17,6 @@ const DEGEN_POOLS = [
   { label: "1 Year", addr: "0x3d175C8359169b0e830d36EA9CD3FE209f46f7BD" },
   { label: "10 Year", addr: "0xdE672FccA32365bD704c39bd1164a0D34a3a73e6" },
 ];
-
-const DEGEN_POOL_APY: Record<string, string> = {
-  "0xdE672FccA32365bD704c39bd1164a0D34a3a73e6": "Est. 31% APY",
-  "0x3d175C8359169b0e830d36EA9CD3FE209f46f7BD": "Est. 14% APY",
-  "0x7ED33f65A0398cb26eaB2B03877825c96D9B6077": "Est. 10% APY",
-  "0xD9B491ac0f5487673500B67224b67b4171a08aCa": "Est. 7% APY",
-};
 
 function fmtMinerAmt(n: number) {
   if (n >= 1e9) return (n / 1e9).toFixed(2) + "B";
@@ -45,11 +41,32 @@ const emptyCard = (): CardState => ({
   status: { text: "", cls: "" },
 });
 
-export function MinersPage({ wallet }: { wallet: WalletState }) {
-  const [walletBal, setWalletBal] = useState(0);
+export function MinersPage({ wallet, poolAddress }: { wallet: WalletState; poolAddress?: string }) {
+  const pageActive = usePageActive();
+  const requestedPool = DEGEN_POOLS.find(pool => pool.addr.toLowerCase() === poolAddress?.toLowerCase())?.addr;
+  const deploymentCards = useRef(new Map<string, HTMLDivElement>());
+  const focusedPool = useRef<string | undefined>(undefined);
+  const [walletBal, setWalletBal] = useState<bigint | null>(null);
+  const active = useRef(false);
+  const [busy, setBusy] = useState(false);
+  const sequence = useRef(0);
   const [cards, setCards] = useState<CardState[]>(() =>
     DEGEN_POOLS.map(emptyCard),
   );
+
+  // Overview links select a known deployment card, never an amount or action.
+  useEffect(() => {
+    if (!pageActive) { focusedPool.current = undefined; return; }
+    if (!requestedPool) { focusedPool.current = undefined; return; }
+    if (focusedPool.current === requestedPool) return;
+    const card = deploymentCards.current.get(requestedPool);
+    if (!card) return;
+    const headerHeight = document.querySelector(".site-header")?.getBoundingClientRect().height ?? 96;
+    card.style.scrollMarginTop = `${Math.ceil(headerHeight) + 20}px`;
+    focusedPool.current = requestedPool;
+    card.focus({ preventScroll: true });
+    card.scrollIntoView({ behavior: "instant", block: "start", inline: "nearest" });
+  }, [pageActive, requestedPool]);
 
   const patchCard = (index: number, patch: Partial<CardState>) =>
     setCards((prev) =>
@@ -63,76 +80,86 @@ export function MinersPage({ wallet }: { wallet: WalletState }) {
 
   const loadWalletBal = useCallback(async () => {
     if (!wallet.address) {
-      setWalletBal(0);
+      setWalletBal(null);
       return;
     }
+    const seq = ++sequence.current;
     try {
       const provider = await getPublicProvider();
       const degenTok = new Contract(CONTRACTS.degen, ERC20_ABI, provider);
-      const bal: bigint = await degenTok
-        .balanceOf(wallet.address)
-        .catch(() => 0n);
-      setWalletBal(parseFloat(formatEther(bal)));
+      const bal: bigint = await degenTok.balanceOf(wallet.address);
+      if (seq === sequence.current) setWalletBal(bal);
     } catch {
       /* keep previous balance */
     }
   }, [wallet.address]);
 
   useEffect(() => {
-    void loadWalletBal();
-  }, [loadWalletBal]);
+    setWalletBal(null);
+    setCards(DEGEN_POOLS.map(emptyCard));
+  }, [wallet.address]);
+
+  useEffect(() => {
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      if (disposed) return;
+      if (pageActive && !document.hidden) await loadWalletBal();
+      if (!disposed) timer = setTimeout(() => void poll(), 60_000);
+    };
+    void poll();
+    return () => { disposed = true; sequence.current++; clearTimeout(timer); };
+  }, [loadWalletBal, pageActive]);
 
   async function deployMiner(index: number) {
+    if (active.current) return;
     const pool = DEGEN_POOLS[index];
     const card = cards[index];
-    if (!wallet.address) {
+    if (!wallet.address || !pool) {
       setStatus(index, "Connect wallet first", "err");
       return;
     }
-    const amount = parseFloat(card.amount);
-    if (!amount || amount <= 0) {
-      setStatus(index, "Enter an amount", "err");
-      return;
-    }
-    const isGift = card.dest === "gift";
-    const giftAddr = card.giftAddr.trim();
-    const mandatory = parseInt(card.mandatory || "0", 10);
-    if (isGift && (!giftAddr || !isAddress(giftAddr))) {
-      setStatus(index, "Enter a valid recipient address", "err");
-      return;
-    }
+    active.current = true;
+    setBusy(true);
     try {
+      const amount = parseEther(card.amount.trim());
+      if (amount <= 0n) throw new Error("Enter a positive DEGEN amount.");
+      const recipient = card.dest === "gift" ? card.giftAddr.trim() : wallet.address;
+      if (!isAddress(recipient) || recipient === ZeroAddress) throw new Error("Enter a valid recipient address.");
+      if (!/^\d+$/.test(card.mandatory || "0")) throw new Error("Mandatory service must be whole days.");
+      const mandatory = BigInt(card.mandatory || "0") * 86400n;
       const signer = await wallet.getSigner();
-      const amtBN = parseEther(String(amount));
+      const account = await signer.getAddress();
       const tok = new Contract(CONTRACTS.degen, ERC20_ABI, signer);
-      const allowance: bigint = await tok.allowance(wallet.address, pool.addr);
-      if (allowance < amtBN) {
-        setStatus(index, "Approve token — check wallet…", "active");
-        const appTx = await tok.approve(pool.addr, MaxUint256);
-        setStatus(index, "Approval confirming…", "active");
-        await appTx.wait();
+      const [balance, allowance] = await Promise.all([tok.balanceOf(account), tok.allowance(account, pool.addr)]);
+      if (amount > balance) throw new Error("Amount exceeds your current DEGEN balance.");
+      if (allowance < amount) {
+        await tok.approve.staticCall(pool.addr, amount);
+        const approval = await tok.approve(pool.addr, amount);
+        await confirmTransaction(approval);
       }
-      setStatus(index, "Confirm deposit in wallet…", "active");
-      const poolContract = new Contract(pool.addr, POOL_DEPOSIT_ABI, signer);
-      const tx = isGift
-        ? await poolContract.giftDeposit(
-            amtBN,
-            giftAddr,
-            BigInt(Math.max(0, mandatory)) * 86400n,
-          )
-        : await poolContract.deposit(amtBN);
-      setStatus(index, "Tx submitted — confirming…", "active");
-      await tx.wait();
-      setStatus(index, isGift ? "Miner gifted!" : "Miner deployed!", "ok");
+      const currentSigner = await wallet.getSigner();
+      if ((await currentSigner.getAddress()).toLowerCase() !== account.toLowerCase()) throw new Error("Wallet changed. Choose the action again.");
+      const poolContract = new Contract(pool.addr, POOL_DEPOSIT_ABI, currentSigner);
+      const currentBalance: bigint = await tok.balanceOf(account);
+      if (currentBalance < amount || await tok.allowance(account, pool.addr) < amount) throw new Error("Balance or allowance changed. Check the amount.");
+      let tx;
+      if (card.dest === "gift") {
+        await poolContract.giftDeposit.staticCall(amount, recipient, mandatory);
+        tx = await poolContract.giftDeposit(amount, recipient, mandatory);
+      } else {
+        await poolContract.deposit.staticCall(amount);
+        tx = await poolContract.deposit(amount);
+      }
+      await confirmTransaction(tx);
+      setStatus(index, card.dest === "gift" ? "Miner gifted." : "Miner deployed.", "ok");
       patchCard(index, { amount: "" });
-      void loadWalletBal();
-    } catch (e) {
-      const err = e as { reason?: string; message?: string };
-      setStatus(
-        index,
-        err.reason || (err.message || "Error").slice(0, 70),
-        "err",
-      );
+      await loadWalletBal();
+    } catch (error) {
+      setStatus(index, readableError(error), "err");
+    } finally {
+      active.current = false;
+      setBusy(false);
     }
   }
 
@@ -166,12 +193,16 @@ export function MinersPage({ wallet }: { wallet: WalletState }) {
         <div className="deploy-pools-grid">
           {DEGEN_POOLS.map((pool, index) => {
             const card = cards[index];
-            const apy = DEGEN_POOL_APY[pool.addr] || "Earn DEGEN";
+            const apy = "Earn DEGEN";
             return (
               <div
                 key={pool.addr}
+                ref={element => { if (element) deploymentCards.current.set(pool.addr, element); else deploymentCards.current.delete(pool.addr); }}
                 className="deploy-pool-card"
-                style={{ "--deploy-color": "var(--red)" } as CSSProperties}
+                role="group"
+                aria-label={`${pool.label} DEGEN miner deployment`}
+                tabIndex={-1}
+                style={{ "--deploy-color": "var(--red)", scrollMarginTop: 116 } as CSSProperties}
               >
                 <div className="deploy-dur">{pool.label} Miner</div>
                 <div
@@ -186,7 +217,7 @@ export function MinersPage({ wallet }: { wallet: WalletState }) {
                 </div>
                 <div className="deploy-apy-badge">{apy}</div>
                 <div className="deploy-wallet-bal">
-                  Wallet: {fmtMinerAmt(walletBal)} DEGEN
+                  Wallet: {walletBal === null ? "—" : fmtMinerAmt(Number(formatEther(walletBal)))} DEGEN
                 </div>
                 <div className="deploy-divider" />
                 <div className="deploy-input-row">
@@ -203,12 +234,10 @@ export function MinersPage({ wallet }: { wallet: WalletState }) {
                   />
                   <button
                     className="deploy-max"
+                    disabled={walletBal === null || busy}
                     onClick={() =>
                       patchCard(index, {
-                        amount:
-                          walletBal > 0
-                            ? walletBal.toFixed(6).replace(/\.?0+$/, "")
-                            : "",
+                        amount: walletBal === null ? "" : formatEther(walletBal),
                       })
                     }
                   >
@@ -292,8 +321,10 @@ export function MinersPage({ wallet }: { wallet: WalletState }) {
                     </div>
                   </div>
                 )}
+                <p className="miner-form-estimate">Miner deposit: {card.amount || "—"} DEGEN</p>
                 <button
                   className="deploy-btn"
+                  disabled={busy}
                   onClick={() => void deployMiner(index)}
                 >
                   Deploy Miner

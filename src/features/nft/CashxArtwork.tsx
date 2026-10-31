@@ -64,7 +64,6 @@ export function CashxArtwork({ imageUrl }: { imageUrl: string }) {
       <div className="cashx-artwork-light-control">
         <button
           type="button"
-          title="Toggle the light effect"
           aria-pressed={lightOn}
           onClick={() => setLightOn((current) => !current)}
         >

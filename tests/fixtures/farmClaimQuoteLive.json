@@ -1,0 +1,17 @@
+{
+  "readOnly": true,
+  "chainId": 369,
+  "block": 27938597,
+  "blockHash": "0x778bdb9a8a0b300f8898c0df13b00189d8111abbcedec37045813623ac4e600d",
+  "account": "0xc4dfecde6ed68ae798331b09f077a4c5b8d8265b",
+  "vault": "0x61B374Fd8Fa06767927bfb11B947d165C06a8c5E",
+  "stakeCount": 16,
+  "helperCreditBeforeRaw": "35060282334253031690074380",
+  "viewRewardsRaw": "52424641139068799735811674",
+  "statefulQuoteRaw": "87484923473321831425886054",
+  "statefulQuoteDegen": "87484923.473321831425886054",
+  "discovery": "Public explorer transaction list for this farm, newest deposit sender",
+  "discoveryUrl": "https://api.scan.pulsechain.com/api?module=account&action=txlist&address=0x61B374Fd8Fa06767927bfb11B947d165C06a8c5E&page=1&offset=40&sort=desc",
+  "notes": "Multicall3 stateful harvest simulation used eth_call only. No signing API or transaction submission was used. This is a public depositor chosen from explorer records, not the user wallet.",
+  "helperCreditAfterRaw": "35060282334253031690074380"
+}

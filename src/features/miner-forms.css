@@ -1,0 +1,15 @@
+.miner-form-estimate { min-height: 2.6em; margin: 10px 0; color: var(--fg); font-size: .85rem; line-height: 1.5; font-variant-numeric: tabular-nums; }
+.miner-inline-max { float: right; border: 1px solid var(--border); border-radius: 5px; padding: 3px 10px; color: var(--red); background: var(--panel); cursor: pointer; font: inherit; }
+.miner-inline-max:disabled { opacity: .5; cursor: default; }
+.deploy-pool-card .deploy-wallet-bal, .deploy-pool-card .deploy-card-status { min-height: 1.5em; font-size: .85rem; opacity: 1; font-variant-numeric: tabular-nums; }
+.deploy-pool-card .deploy-input, .dsale-modal-input { font-size: 1rem; min-height: 44px; font-variant-numeric: tabular-nums; }
+.deploy-pool-card .deploy-btn, .dsale-modal-exec-btn, .ref-claim-btn { min-height: 44px; }
+.ref-stats-row .ref-stat-val, .dsale-panel-stat-val, .miners-summary-col-val { font-variant-numeric: tabular-nums; }
+.miner-payout-comparison { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; font-size: .85rem; margin: 14px 0; }
+.miner-payout-comparison > div { padding: 10px; border: 1px solid var(--border); border-radius: 6px; }
+.miner-payout-comparison strong { display: block; margin-top: 4px; font-variant-numeric: tabular-nums; }
+@media (max-width: 480px) { .miner-payout-comparison { grid-template-columns: 1fr; } }
+
+.miner-action-overlay { pointer-events: none; background: transparent; align-items: flex-start; justify-content: flex-end; padding: 90px 20px 20px; }
+.miner-action-overlay .modal-box { pointer-events: auto; max-width: 480px !important; max-height: calc(100dvh - 110px); overflow-y: auto; box-shadow: 0 12px 48px #0008; }
+@media (max-width: 600px) { .miner-action-overlay { padding: 72px 8px 8px; } .miner-action-overlay .modal-box { max-height: calc(100dvh - 80px); } }
