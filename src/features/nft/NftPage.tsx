@@ -24,6 +24,7 @@ import { PageActivity, usePageActive } from "../../hooks/usePageActive";
 import { HelpTip } from "../../components/HelpTip";
 import { RewardsActions } from "./RewardsActions";
 import { CashxArtwork } from "./CashxArtwork";
+import { readNftYield } from "./yieldData";
 
 type NftTab = "mint" | "rewards" | "calculator" | "holders" | "activity";
 type Holder = { address: string; value: number };
@@ -749,8 +750,7 @@ function CalculatorPanel({
 }) {
   const [quantity, setQuantity] = useState(1);
   const pageActive = usePageActive();
-  const [dailyOink, setDailyOink] = useState("");
-  const [dailyDegen, setDailyDegen] = useState("");
+  const rates = useQuery({ queryKey: ["nft-yield"], queryFn: readNftYield, enabled: pageActive, staleTime: 30_000, refetchInterval: pageActive ? 60_000 : false });
   const quote = useQuery({
     queryKey: ["nft-calculator-quote", quantity, price.toString()],
     enabled: pageActive && price > 0n,
@@ -758,16 +758,10 @@ function CalculatorPanel({
     staleTime: 60_000,
   });
   const total = quote.data;
-  const projected = (amount: string, days: number) => {
-    try {
-      if (!amount.trim()) return "—";
-      const raw = parseEther(amount);
-      return raw >= 0n ? formatToken(raw * BigInt(days) * BigInt(quantity)) : "—";
-    } catch { return "—"; }
-  };
+  const projected = (amount: bigint | undefined, days: number) => amount === undefined ? "—" : formatToken(amount * BigInt(days) * BigInt(quantity));
   return (
     <section className="feature-panel">
-      <span className="eyebrow">Planning tool</span>
+      <span className="eyebrow">Current reward rates</span>
       <h2>Yield Calculator</h2>
       <div className="calculator-layout">
         <div>
@@ -794,33 +788,27 @@ function CalculatorPanel({
           </div>
         </div>
         <div className="total-card">
-          <span>Estimated purchase cost</span>
+          <span>Purchase cost</span>
           <strong>{total ? `${formatPls(total)} PLS` : "—"}</strong>
-          <small>Contract purchase quote; excludes network fees</small>
         </div>
-      </div>
-      <div className="calculator-assumptions">
-        <label>Assumed daily OINK per NFT<input inputMode="decimal" value={dailyOink} onChange={e => setDailyOink(e.target.value)} placeholder="Enter a daily estimate" /></label>
-        <label>Assumed daily DEGEN per NFT<input inputMode="decimal" value={dailyDegen} onChange={e => setDailyDegen(e.target.value)} placeholder="Enter a daily estimate" /></label>
       </div>
       <div className="projection-grid">
         <article>
           <span>Daily</span>
-          <b>{projected(dailyOink, 1)} OINK</b>
-          <b>{projected(dailyDegen, 1)} DEGEN</b>
+          <b>{projected(rates.data?.oink, 1)} OINK</b>
+          <b>{projected(rates.data?.degen, 1)} DEGEN</b>
         </article>
         <article>
           <span>30 Days</span>
-          <b>{projected(dailyOink, 30)} OINK</b>
-          <b>{projected(dailyDegen, 30)} DEGEN</b>
+          <b>{projected(rates.data?.oink, 30)} OINK</b>
+          <b>{projected(rates.data?.degen, 30)} DEGEN</b>
         </article>
         <article>
           <span>365 Days</span>
-          <b>{projected(dailyOink, 365)} OINK</b>
-          <b>{projected(dailyDegen, 365)} DEGEN</b>
+          <b>{projected(rates.data?.oink, 365)} OINK</b>
+          <b>{projected(rates.data?.degen, 365)} DEGEN</b>
         </article>
       </div>
-      <p className="migration-note">Scenario estimate <HelpTip label="yield estimates">Uses your daily estimates at a constant rate. It excludes compounding, claim penalties, network fees, and future rate changes. The contract reward return has no verified time unit, so it is not presented as live APR.</HelpTip></p>
     </section>
   );
 }
