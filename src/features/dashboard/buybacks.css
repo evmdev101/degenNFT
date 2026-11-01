@@ -1,0 +1,79 @@
+.oink-buybacks { margin-bottom: 28px; }
+.buyback-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+.buyback-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.buyback-title img { flex: 0 0 42px; object-fit: contain; }
+.buyback-kicker { display: block; color: var(--dash-muted); font-size: 11px; line-height: 1.4; letter-spacing: .08em; }
+.buyback-heading a { color: var(--fg); font-size: 13px; text-decoration: none; padding-block: 8px; }
+.buyback-heading a:hover { text-decoration: underline; }
+.buyback-contracts { position: relative; font-size: 13px; }
+.buyback-contracts summary { cursor: pointer; padding: 10px 0; }
+.buyback-contracts > div { position: absolute; z-index: 2; right: 0; top: 100%; width: 240px; padding: 8px 14px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); }
+.buyback-contracts a { display: flex; justify-content: space-between; gap: 12px; min-height: 44px; align-items: center; }
+.buyback-contracts a span { color: var(--dash-muted); }
+.dashboard-main .buyback-intro { margin: 14px 0 24px; color: var(--dash-muted); font-size: 15px; }
+.buyback-stats { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 20px; }
+.buyback-stats > div { display: flex; flex-direction: column; min-width: 0; gap: 8px; }
+.buyback-stats > div > span { color: var(--dash-muted); font-size: 13px; }
+.buyback-stats > div > strong { font-size: clamp(24px,2.5vw,32px); line-height: 1.3; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.buyback-stats > div > strong small { font-size: 12px; font-weight: 500; color: var(--dash-muted); }
+.buyback-stats > div > small { color: var(--dash-muted); font-size: 12px; line-height: 1.5; }
+.buyback-windows { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; margin-top: 24px; }
+.buyback-windows > div { min-width: 0; padding: 14px 16px; border: 1px solid var(--border); border-radius: 9px; }
+.buyback-windows > div > span { display: block; color: var(--dash-muted); font-size: 13px; }
+.buyback-windows strong { display: block; margin: 5px 0; font-size: 21px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.buyback-windows strong small { font-size: 12px; font-weight: 500; }
+.buyback-windows > div > small { color: var(--dash-muted); font-size: 12px; }
+.buyback-history-layout { display: grid; grid-template-columns: minmax(0,1fr); gap: 28px; margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--border); align-items: start; }
+.buyback-chart { min-width: 0; }
+.buyback-activity-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
+.dashboard-main .buyback-activity-heading h3 { font-size: 22px; }
+.buyback-chart-ranges { display: inline-flex; padding: 3px; border: 1px solid color-mix(in srgb,var(--accent) 40%,var(--border)); border-radius: 24px; background: color-mix(in srgb,var(--bg) 70%,var(--panel)); }
+.dashboard-main .buyback-chart-ranges button { min-width: 45px; min-height: 30px; padding: 5px 12px; border: 0; border-radius: 20px; background: transparent; color: var(--dash-muted); font: 600 11px/1.4 "DM Sans",sans-serif; cursor: pointer; }
+.dashboard-main .buyback-chart-ranges button[aria-pressed="true"] { background: linear-gradient(145deg,var(--accent),color-mix(in srgb,var(--accent) 45%,var(--panel))); color: var(--fg); }
+.dashboard-main .buyback-chart-ranges button:hover { color: var(--fg); }
+.buyback-plot { overflow: hidden; border: 1px solid color-mix(in srgb,var(--border) 65%,transparent); border-radius: 10px; background: color-mix(in srgb,var(--bg) 80%,var(--panel)); }
+.buyback-chart svg { display: block; width: 100%; height: auto; touch-action: pan-y; }
+.buyback-chart-grid line,.buyback-chart-vertical { stroke: color-mix(in srgb,var(--border) 38%,transparent); stroke-width: 1; }
+.buyback-chart-grid text,.buyback-chart-tick { fill: var(--dash-muted); font: 11px "DM Sans",sans-serif; }
+.buyback-chart-line { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.buyback-chart-dot { fill: var(--accent); }
+.buyback-chart-active line { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 4 4; opacity: .65; }
+.buyback-chart-active circle { fill: var(--accent); stroke: var(--panel); stroke-width: 2; }
+.buyback-chart-readout { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; min-height: 28px; padding-top: 12px; font-size: 13px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.buyback-chart-readout > span { color: var(--dash-muted); }
+.buyback-history { min-width: 0; }
+.dashboard-main .buyback-history h3 { margin: 0 0 10px; font-size: 16px; }
+.buyback-list { display: grid; align-content: start; height: min(470px,60dvh); max-height: 470px; overflow-y: auto; overflow-x: hidden; padding-right: 4px; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.buyback-list:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.buyback-row { display: flex; justify-content: space-between; align-items: center; gap: 14px; min-width: 0; padding: 12px 0; border-bottom: 1px solid var(--border); color: var(--fg); text-decoration: none; }
+.buyback-row > span:first-child { min-width: 0; }
+.buyback-row strong { display: block; font-size: 15px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.buyback-row small { display: block; margin-top: 3px; font-size: 12px; color: var(--dash-muted); overflow-wrap: anywhere; }
+.buyback-time { display: flex; align-items: center; justify-content: flex-end; gap: 8px; color: var(--dash-muted); font-size: 12px; text-align: right; flex-shrink: 0; }
+.buyback-row:hover strong { color: var(--accent); }
+.buyback-show-more { width: 100%; margin-top: 12px; }
+.oink-buybacks :is(a,button,summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (max-width: 900px) {
+  .buyback-stats { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 22px 18px; }
+  .buyback-history-layout { grid-template-columns: minmax(0,1fr); gap: 24px; }
+}
+@media (max-width: 650px) {
+  .buyback-stats > div > strong { font-size: 25px; }
+  .buyback-activity-heading { align-items: start; }
+  .dashboard-main .buyback-activity-heading h3 { font-size: 20px; }
+  .dashboard-main .buyback-chart-ranges button { min-width: 44px; min-height: 38px; padding: 5px 9px; }
+  .buyback-heading a { min-height: 44px; display: inline-flex; align-items: center; }
+  .buyback-contracts { width: 100%; }
+  .buyback-contracts > div { position: static; width: min(240px,100%); }
+  .buyback-windows { grid-template-columns: minmax(0,1fr); gap: 8px; }
+  .buyback-windows > div { display: grid; grid-template-columns: 65px minmax(0,1fr); column-gap: 10px; align-items: center; padding: 12px; }
+  .buyback-windows strong { margin: 0; font-size: 20px; }
+  .buyback-windows > div > small { grid-column: 2; }
+  .buyback-row { align-items: start; flex-wrap: wrap; gap: 6px; }
+  .buyback-time { flex-basis: 100%; justify-content: flex-start; text-align: left; }
+}
+@media (max-width: 360px) {
+  .buyback-stats { gap: 20px 12px; }
+  .buyback-stats > div > strong { font-size: 23px; }
+  .buyback-stats > div > strong small { display: block; margin-top: 2px; }
+}

@@ -2,6 +2,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { clearDashboardPriceCache, pricesFromPairs, readTokenPrices } from "../src/features/dashboard/marketData";
 afterEach(() => { vi.unstubAllGlobals(); clearDashboardPriceCache(); });
 describe("dashboard market quotes", () => {
+  it("derives an omitted DEGEN USD quote through a live OINK market", () => {
+    const pairs = [
+      { chainId: "pulsechain", baseToken: { address: "degen" }, quoteToken: { address: "oink" }, priceNative: "0.0001891" },
+      { chainId: "pulsechain", baseToken: { address: "oink" }, priceUsd: "0.000024" },
+    ];
+    expect(pricesFromPairs(["degen"], pairs).degen).toBeCloseTo(.0001891 * .000024, 18);
+    expect(pricesFromPairs(["degen"], pairs.slice(0, 1))).toEqual({ degen: null });
+  });
   it("uses the deepest PulseChain market and derives quote-token USD from priceNative", () => {
     expect(pricesFromPairs(["0xAA", "0xBB", "0xCC"], [
       { chainId: "ethereum", baseToken: { address: "0xaa" }, priceUsd: "999", liquidity: { usd: 999999 } },

@@ -4,7 +4,8 @@ const pending = new Map<string, Promise<Record<string, number | null>>>();
 
 /** Market estimates only. Never use these numbers to construct transactions. */
 export function pricesFromPairs(addresses: readonly string[], pairs: readonly Pair[]): Record<string, number | null> {
-  return Object.fromEntries(addresses.map(address => {
+  const tokens = [...new Set([...addresses, ...pairs.flatMap(pair => [pair.baseToken?.address, pair.quoteToken?.address].filter((address): address is string => Boolean(address)))].map(address => address.toLowerCase()))];
+  const values: Record<string, number | null> = Object.fromEntries(tokens.map(address => {
     const key = address.toLowerCase();
     const candidates = pairs.flatMap(pair => {
       if (pair.chainId !== "pulsechain") return [];
@@ -15,6 +16,27 @@ export function pricesFromPairs(addresses: readonly string[], pairs: readonly Pa
     }).sort((a, b) => b.liquidity - a.liquidity);
     return [key, candidates[0]?.value ?? null];
   }));
+  // Some markets expose only the base/quote exchange rate. Resolve those from
+  // a quoted token's USD price; unanchored cycles remain unavailable.
+  for (let pass = 0; pass < tokens.length; pass++) {
+    const updates: Record<string, number> = {};
+    for (const key of tokens) {
+      if (values[key] !== null) continue;
+      const candidates = pairs.flatMap(pair => {
+        if (pair.chainId !== "pulsechain") return [];
+        const base = pair.baseToken?.address?.toLowerCase(), quote = pair.quoteToken?.address?.toLowerCase();
+        const ratio = Number(pair.priceNative);
+        if (!base || !quote || !Number.isFinite(ratio) || ratio <= 0) return [];
+        const value = base === key && values[quote] ? ratio * values[quote]!
+          : quote === key && values[base] ? values[base]! / ratio : NaN;
+        return Number.isFinite(value) && value > 0 ? [{ value, liquidity: Number(pair.liquidity?.usd) || 0 }] : [];
+      }).sort((a, b) => b.liquidity - a.liquidity);
+      if (candidates[0]) updates[key] = candidates[0].value;
+    }
+    if (!Object.keys(updates).length) break;
+    Object.assign(values, updates);
+  }
+  return Object.fromEntries(addresses.map(address => [address.toLowerCase(), values[address.toLowerCase()]]));
 }
 
 export async function readTokenPrices(addresses: readonly string[]): Promise<Record<string, number | null>> {

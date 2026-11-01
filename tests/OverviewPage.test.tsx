@@ -10,6 +10,7 @@ vi.mock("../src/features/dashboard/TreasuryFarming", () => ({ TreasuryPositions:
 vi.mock("../src/features/dashboard/ContractShowcase", () => ({ ContractShowcase: () => null }));
 vi.mock("../src/features/dashboard/ProtocolInsights", () => ({ ProtocolInsights: () => null }));
 vi.mock("../src/features/dashboard/RecentActivity", () => ({ RecentActivity: () => null }));
+vi.mock("../src/features/dashboard/OinkBuybacks", () => ({ OinkBuybacks: () => null }));
 const now = () => Math.floor(Date.now() / 1000);
 const asset = DASHBOARD_ASSETS.find(asset => asset.symbol === "DEGEN")!;
 const hash = (id: number) => `0x${id.toString(16).padStart(64, "0")}`;

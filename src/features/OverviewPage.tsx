@@ -11,6 +11,7 @@ import { TreasuryPositions } from "./dashboard/TreasuryFarming";
 import { ContractShowcase } from "./dashboard/ContractShowcase";
 import { ProtocolInsights } from "./dashboard/ProtocolInsights";
 import { RecentActivity } from "./dashboard/RecentActivity";
+import { OinkBuybacks } from "./dashboard/OinkBuybacks";
 
 const usd = (value: number | null | undefined) => value == null ? "—" : value > 0 && value < .01 ? "<$0.01" : new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value);
 function amount(raw: bigint | null | undefined, decimals = 18, compact = false) {
@@ -100,6 +101,7 @@ export function OverviewPage() {
   const balancesStale = dashboardSnapshotStale(snapshot ? snapshot.timestamp * 1000 : undefined, now);
   const currentPrices = !balancesStale && !treasury.error ? snapshot?.prices ?? {} : {};
   const degen = snapshot?.holdings.find(row => row.asset.address.toLowerCase() === CONTRACTS.degen.toLowerCase());
+  const oink = snapshot?.holdings.find(row => row.asset.address.toLowerCase() === CONTRACTS.oink.toLowerCase());
   const pls = snapshot?.holdings.find(row => row.asset.native);
   const metrics = [
     { label: "DEGEN supply", value: amount(snapshot?.supplyRaw, 18, true), detail: "Current total supply" },
@@ -118,6 +120,7 @@ export function OverviewPage() {
         {metric.href ? <Link className="dash-stat-sub" to={metric.href}>{metric.detail}</Link> : <span className="dash-stat-sub">{metric.detail}</span>}
       </article>)}
     </section>
+    <OinkBuybacks treasuryOinkRaw={oink?.raw} oinkPriceUsd={currentPrices[CONTRACTS.oink.toLowerCase()]} />
     {treasury.error && !snapshot && <p className="dash-data-error" role="status">Treasury balances are temporarily unavailable.</p>}
     <div className="dash-overview-columns">
       <section className="dash-card dash-inflow-card" aria-labelledby="treasury-inflows-heading">
